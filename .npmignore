@@ -1,0 +1,43 @@
+# git
+.gitignore
+
+# Babel
+.babelrc
+
+# Rollup
+rollup.config.mjs
+
+# Code of Conduct
+CODE_OF_CONDUCT.md
+
+# Travis CI
+.travis.yml
+
+# tests
+/test/
+/.tap/
+
+# test coverage folder
+/coverage/
+/.nyc_output/
+
+# npm errors
+npm-debug.log
+
+# github pages
+/gh-pages/
+
+# workspace files are user-specific
+*.sublime-workspace
+
+# bundle folder is just used to run it in a basic demo page
+/bundle/
+
+# build-time scripts
+/build-scripts/
+
+# `tap` test data
+/.tap/
+
+# `vitest` test data
+/.vitest-attachments/
