@@ -31,7 +31,7 @@ await workerFn.call(4, 5) === 9
 workerFn.stop()
 ```
 
-Advanced usage scenarios are described further in this document.
+Advanced usage scenarios, like "streaming", are described further in this document.
 
 ## Import
 
@@ -60,6 +60,8 @@ const workerFn = workerFunction((a, b) => a + b)
 Calls a function with arguments and returns a result.
 
 ```js
+import workerFunction from 'worker-f/node'
+
 const workerFn = workerFunction((a, b) => a + b)
 
 workerFn.start()
@@ -76,13 +78,15 @@ The function could be synchronous or asynchronous — doesn't matter.
 
 If the function [rejects](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Promise) or throws an error, it will automatically stop.
 
-If a developer forgets to stop a worker function that is no longer used, it will still stop automatically when the code no longer holds any "[reference](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Guide/Memory_management)" to it. It will also stop automatically when the web browser tab is closed, or the Node.js process is killed. But until then, it will keep holding its memory.
+If a developer forgets to stop a worker function that is no longer used, it will still stop automatically when the code no longer holds any "[reference](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Guide/Memory_management)" to it. It will also stop automatically when the web browser tab is closed, or the Node.js process is killed. But until stopped, it will keep holding its memory.
 
 ### Call Once
 
 Use this when the function will only be called once. No need to start or stop the function manually — it all happens automatically. Attempting to call the function second time will throw an error.
 
 ```js
+import workerFunction from 'worker-f/node'
+
 const workerFn = workerFunction((a, b) => a + b)
 
 await workerFn.callOnce(1, 2) === 3
@@ -93,7 +97,7 @@ await workerFn.callOnce(1, 2) === 3
 If a function is designed to produce multiple outputs over time, it should use "stream" API rather than "call" API.
 
 ```js
-import type { Send } from 'worker-f/node/stream'
+import workerFunction, { type Send } from 'worker-f/node/stream'
 
 const workerFn = workerFunction(
   // Use `send()` to output anything from the function
@@ -158,6 +162,7 @@ const c = 3
 // External function
 const d = () => 4
 
+// This worker function references `c` and `d` which are outside of its body
 const workerFn = workerFunction((a, b) => a + b + c + d())
 
 // Without declaring `c` and `d` as "dependencies",
@@ -170,40 +175,44 @@ workerFn.addDependencies(() => [c, d])
 await workerFn.callOnce(1, 2) === 10
 ```
 
-Any external dependencies that're functions must either be "self-contained" functions or specify their own external dependencies in `.addDependencies(...)`. And the loop continues until the very last sub-sub-sub-dependency function is finally "self-contained".
+Any external dependencies that're functions must either be "self-contained" functions or specify their own external dependencies in the `.addDependencies(...)` call. And the loop continues until the very last sub-sub-sub-dependency function is finally "self-contained".
 
 ```js
+// External function that is "self-contained" because it doesn't reference anything outside of its body
 const d = () => 4
+
+// External function that references `d` which is outside of its body
 const c = () => 3 + d()
 
+// This worker function references `c` which is outside of its body
 const workerFn = workerFunction((a, b) => a + b + c())
 
-// Specifying just `c` is not enough because `d` is also an external dependency.
+// Specifying just `c` is not enough because `d` is also an external sub-dependency
 workerFn.addDependencies(() => [c])
 // throws: "ReferenceError: d is not defined"
 await workerFn.callOnce(1, 2)
 
-// Instead, it should've been:
-
+// How to fix the error:
 workerFn.addDependencies(() => [c, d])
+// Now it works
 await workerFn.callOnce(1, 2) === 10
 ```
 
-To reduce the number of external dependencies, one could put everyting into a single large "self-contained" function that doesn't reference anything outside of its body. And if it does reference anything outside of its body, those references themselves must be "self-contained" functions that don't reference anything outside of their body, etc.
+To reduce the number of external dependencies, one could put everyting into a single large "self-contained" function that doesn't reference anything outside of its body. Or if it does reference anything outside of its body, those references themselves must be "self-contained" functions that don't reference anything outside of their body, etc.
 
 With that in mind, one could see how specifying all the dependencies correctly could become a tedious task in a typical modular application where the code is spread over countless smaller modules, each of them importing other smaller modules, etc. So a better approach would be to just move everything — the function itself and most of its dependencies — into a single big "wrapper" function, as if we're back in 2000s, and then create a worker from it.
 
 ```js
-// A "wrapper" function has the same arguments as the original function.
+// A "wrapper" function that has the same arguments as the original function
 export function fn_(a, b) {
-  // Any dependencies are put right here, inside the wrapper function body.
+  // Any dependencies are put right here, inside the wrapper function body
   const d = () => 4
   const c = () => 3 + d()
 
-  // The original function is also put here.
+  // The original function is also put here
   const fn = (a, b) => a + b + c()
 
-  // Call the original function with the arguments.
+  // Call the original function with the arguments
   return fn(a, b)
 }
 ```
@@ -214,13 +223,13 @@ export function fn_(a, b) {
 const workerFn = workerFunction(fn_)
 ```
 
-Needless to say that after a worker function has been started, none of its dependencies should change because those changes won't be reflected in the worker function's thread.
+Needless to say that after a worker function has been started, none of its dependencies should change because those changes won't be reflected inside the worker function's thread, i.e. it won't "see" any changes.
 
 ## Caching
 
-Every time a new worker function is created, it has to stringify the function body in order to insert its source code in the worker code. If the application plans on creating many worker functions from the same function, and that function has no [external dependencies](#external-dependencies) or those dependencies are constant, then it would make sense to only generate the function's source code once and then reuse it every time a new worker function is created from this function.
+Every time a new worker function is created, it has to stringify the function body in order to generate the worker's code. If the application plans on creating many workers from same function, and that function has no [external dependencies](#external-dependencies) or those dependencies are constant, then it would make sense to only generate the function's source code once and then reuse it every time a new worker is created from this function.
 
-To "cache" the function's source code for creating future worker functions, call `.alias()` method on a worker function.
+To "cache" a function's source code for creating future workers, call `.alias()` method on the worker function.
 
 ```js
 const c = () => 1
@@ -312,9 +321,9 @@ workerFns.stop()
 
 ## Performance
 
-By default, any arguments or data that're passed to a worker function are [cloned](https://developer.mozilla.org/en-US/docs/Web/API/Web_Workers_API/Structured_clone_algorithm) behind the scenes. And same goes for any results that're received back from the worker function.
+By default, any input passed to a worker function is [cloned](https://developer.mozilla.org/en-US/docs/Web/API/Web_Workers_API/Structured_clone_algorithm) behind the scenes. And same goes for any output.
 
-Because of how seamless this "cloning" is, developers don't even have to bother knowing that it exists.
+Because of how seamless the "cloning" is, developers don't even have to bother knowing that it takes place.
 
 Yet, in some situations, the data being passed between the main thread and the worker thread might become large-enough to justify tinkering with potential optimization.
 
@@ -326,31 +335,31 @@ How large is "large-enough"?
 
 So the short answer is: "I personally don't really know or care". The rule of thumb is to keep the data being sent between the main thread and the worker thread to a minimum.
 
-Sidenote: The "cloning" is "synchronous" meaning that it blocks the main thread until it finishes cloning.
+Sidenote: The "cloning" is "synchronous" so it blocks the main thread until it finishes cloning.
 
 ## Transfer List
 
 When passing `ArrayBuffer`s, there's an optional feature called "[transfer](https://developer.mozilla.org/en-US/docs/Web/API/Web_Workers_API/Transferable_objects)". When it "transfers" a buffer, it doesn't clone it, but instead it simply "transfers" the ownership of the buffer from the "main thread" to the "worker thread", and vice versa, which is a "free" operation. Although note that after a buffer has been "transferred", it's no longer usable in the code that "transferred" it.
 
-To enable "transfer" for selected buffers, call `inputTransferList()` / `outputTransferList()` methods on a worker function.
+To enable "transfer" for certain input/output buffers, call `inputTransferList()` / `outputTransferList()` methods on a worker function.
 
 ```js
 // A worker function with some input and output.
 const parser = workerFunction((arrayBuffer, dataType) => {
-  // ... Parse data from the buffer ...
+  // ... Parse the data from the buffer according to the data type ...
   return data
 })
 
-// Define a function that returns a `transferList` for input arguments.
-// The default implementation returns an empty list.
+// Pass a function that returns a `transferList` for the input of the worker function.
+// By default, an empty `transferList` is used for the input of the worker function.
 parser.inputTransferList((arrayBuffer, dataType) => [arrayBuffer])
 
-// Define a function that returns a `transferList` for output result.
-// The default implementation returns an empty list.
+// Pass a function that returns a `transferList` for the output of the worker function.
+// By default, an empty `transferList` is used for the output of the worker function.
 parser.outputTransferList((data) => [])
 
-// When calling the worker function, the `arrayBuffer` will be transferred
-// from the main thread to the worker thread.
+// Now, when passing an `arrayBuffer` to the worker function,
+// it will be "transferred" from the main thread to the worker thread.
 const data = await parser.callOnce(arrayBuffer, 'document')
 ```
 
@@ -416,11 +425,11 @@ workerFn.transferDependency((dependency, setDependencyValue) => {
 ```
 -->
 
-## Catching Errors
+## Errors
 
-If the function throws an error, the `Promise` returned by `.call()` or `.callOnce()` will be rejected and the worker function will automatically stop.
+When using "call" API, if the function [rejects](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Promise) or throws an error, the returned `Promise` will be rejected and the worker function will automatically stop.
 
-When not using `.call()` or `.callOnce()`, the optional `onError` listener will be called and the worker function will automatically stop.
+When using "stream" API, the optional `.onError()` listener will be called and the worker function will automatically stop.
 
 ## Development
 
