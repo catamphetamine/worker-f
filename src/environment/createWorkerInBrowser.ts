@@ -15,7 +15,7 @@ import type { EnvironmentWorker } from '../createWorkerFunction.common.d.ts'
  * @param {function} setInCache — Could be used to add caching. Receives the value to cache as an argument. Doesn't return anything.
  * @param {function} onError — This function will be called every time when there was an error while processing an incoming message. It would be logical to call `worker.terminate()` inside this function.
  * @param {function} onOutput — This function will be called every time when done processing an incoming message.
- * @returns {Worker} — An object with methods: `push(data, transferList)`, `stop()`.
+ * @returns {Worker} — An object with methods: `ingest(data, transferList)`, `stop()`.
  */
 export default function createWorkerInBrowser<OutputData>(
 	javascriptCode: string,
@@ -40,7 +40,7 @@ export default function createWorkerInBrowser<OutputData>(
   // Upon receiving a result (or an error) from the worker, it calls the `callback`.
   worker.onmessage = (event) => {
     const data = event.data
-    const errorData = data[ERROR_MESSAGE_PROPERTY_NAME]
+    const errorData = data ? data[ERROR_MESSAGE_PROPERTY_NAME] : undefined
     if (errorData) {
       const [name, message, code, stack] = errorData
       const error = new Error(message)
@@ -61,7 +61,7 @@ export default function createWorkerInBrowser<OutputData>(
     // Calling `worker.terminate()` will kill the worker thread immediately.
     // Calling `worker.terminate()` multiple times is safe and will not throw any errors.
     stop: worker.terminate.bind(worker),
-    push: worker.postMessage.bind(worker)
+    ingest: worker.postMessage.bind(worker)
   }
 }
 

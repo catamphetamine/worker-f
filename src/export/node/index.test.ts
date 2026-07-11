@@ -10,11 +10,11 @@ test('`/node` export: create and call a function', async (t) => {
 	const workerFn = createWorkerFunction((a: number, b: number) => a + b)
 	await throwsAsync(t, async () => await workerFn.call(1, 2), 'Not started')
 	workerFn.start()
-	t.throws(() => workerFn.start(), 'Already started')
+	t.throws(() => workerFn.start(), 'Was started')
 	t.equal(await workerFn.call(1, 2), 3)
 	workerFn.stop()
 	workerFn.stop()
-	await throwsAsync(t, async () => await workerFn.call(1, 2), 'Already stopped')
+	await throwsAsync(t, async () => await workerFn.call(1, 2), 'Was stopped')
 })
 
 async function throwsAsync(t: Test, func: Function, message: string) {

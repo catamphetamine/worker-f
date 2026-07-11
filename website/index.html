@@ -1,0 +1,479 @@
+<html>
+  <head>
+    <title>worker-f</title>
+
+    <meta charset="utf-8">
+
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+    <script src="./worker-f.min.js"></script>
+
+    <script src="./lib/prism.js"></script>
+
+    <style>
+      body
+      {
+        margin : 20px;
+        font-family : Arial, Helvetica;
+        background: #434343;
+        color: #dddddd;
+      }
+
+      .supersection
+      {
+      }
+
+      .supersection-content > section > header
+      {
+        display: flex;
+        align-items: center;
+      }
+
+      .supersection-content > section > header > button
+      {
+        padding: 0.5rem;
+        background: none;
+        border: none;
+        cursor: pointer;
+        color: #fd8900;
+        margin-bottom: -5px;
+        font-size: 0.75rem;
+        margin-left: 0.5rem;
+        border-radius: 5px;
+        text-transform: uppercase;
+        letter-spacing: 1px;
+      }
+
+      /*
+      .supersection-content > section > header > button.selected
+      {
+        color: black;
+        font-weight: bolder;
+        background: #fd8900;
+      }
+      */
+
+      .supersection-content > section > header > button:active
+      {
+        color: black;
+        font-weight: bolder;
+        background: #fd8900;
+      }
+
+      .supersection > button
+      {
+        padding: 1rem;
+        background: none;
+        /*background: #fd8900;*/
+        border: none;
+        cursor: pointer;
+        color: #fd8900;
+        margin-bottom: -5px;
+        font-size: 1rem;
+        border-radius: 5px;
+        border: 2px solid #fd8900;
+        text-transform: uppercase;
+        letter-spacing: 1px;
+      }
+
+      .supersection > button:active
+      {
+        background: #fd8900;
+        color: black;
+        font-weight: bolder;
+      }
+
+      #main-thread-code-edit
+      {
+        display: none;
+      }
+
+      .supersection-content
+      {
+        display: flex;
+        gap: 1rem;
+      }
+
+      .supersection-content > section
+      {
+        flex: 1;
+      }
+
+      @media screen and (max-width: 800px)
+      {
+        .supersection-content
+        {
+          flex-direction: column;
+        }
+
+        .supersection-content > section:nth-child(1)
+        {
+          order: 2
+        }
+      }
+
+      .supersection-content > section > pre,
+      .supersection-content > section > textarea,
+      .supersection-content > section > .content
+      {
+        width: 100%;
+        height: 14rem;
+        box-sizing: border-box;
+      }
+
+      .supersection-content > section > pre
+      {
+        margin: 0;
+        padding: 1rem;
+      }
+
+      .supersection-content > section > textarea
+      {
+        padding: 1rem;
+        font-size: 1rem;
+        line-height: 1.5rem;
+        background-color: #2d2d2d;
+        color: #ccc;
+      }
+
+      .supersection-content > section > pre
+      {
+      }
+
+      .supersection-content > section > .content
+      {
+        padding: 1rem;
+        background-color: #2d2d2d;
+      }
+
+
+      .supersection > button
+      {
+        margin-top: 1rem;
+      }
+
+      #main-link
+      {
+        display     : block;
+        font-size   : 24px;
+        color       : #fd8900;
+        font-family : monospace;
+        text-decoration : none;
+      }
+
+      code
+      {
+         color: #fd8900;
+         font-size: 1.25em;
+      }
+
+      hr
+      {
+         opacity: 0.5;
+         border-color: #fd8900;
+         border-width: 1px;
+         border-top-width: 0px;
+      }
+
+      .test-cases-page-link
+      {
+        color: #ccc;
+        text-decoration: none;
+      }
+
+      .test-cases-page-link:hover
+      {
+        text-decoration: underline;
+      }
+
+      #clock-title
+      {
+        margin-top: 0.5rem;
+        font-size: 1.25rem;
+      }
+
+      #clock
+      {
+        display: flex;
+        gap: 0.1em;
+
+        font-size: 1.5rem;
+        font-family: monospace;
+      }
+
+      #loading
+      {
+        position: relative;
+        top: 0.95rem;
+        left: 0.5rem;
+      }
+
+			/* Loading Indicator */
+			/* https://loading.io/css/ */
+			.lds-ellipsis {
+				display: inline-block;
+				position: relative;
+				width: 40px;
+				height: 40px;
+			}
+			.lds-ellipsis div {
+				position: absolute;
+				top: 16px;
+				width: 7px;
+				height: 7px;
+				border-radius: 50%;
+				background: #cccccc;
+				animation-timing-function: cubic-bezier(0, 1, 1, 0);
+			}
+			.lds-ellipsis div:nth-child(1) {
+				left: 4px;
+				animation: lds-ellipsis1 0.6s infinite;
+			}
+			.lds-ellipsis div:nth-child(2) {
+				left: 4px;
+				animation: lds-ellipsis2 0.6s infinite;
+			}
+			.lds-ellipsis div:nth-child(3) {
+				left: 16px;
+				animation: lds-ellipsis2 0.6s infinite;
+			}
+			.lds-ellipsis div:nth-child(4) {
+				left: 28px;
+				animation: lds-ellipsis3 0.6s infinite;
+			}
+			@keyframes lds-ellipsis1 {
+				0% {
+					transform: scale(0);
+				}
+				100% {
+					transform: scale(1);
+				}
+			}
+				@keyframes lds-ellipsis3 {
+				0% {
+					transform: scale(1);
+				}
+				100% {
+					transform: scale(0);
+				}
+			}
+			@keyframes lds-ellipsis2 {
+				0% {
+					transform: translate(0, 0);
+				}
+				100% {
+					transform: translate(12px, 0);
+				}
+			}
+    </style>
+
+    <link href="lib/prism.css" rel="stylesheet" />
+  </head>
+
+  <body>
+    <a id="main-link" href="https://www.npmjs.com/package/worker-f">
+      worker-f
+    </a>
+
+    <br/>
+
+    <div>
+      Runs a function in a separate thread in a web browser or Node.js
+    </div>
+
+    <br/>
+    <br/>
+
+    <div class="supersection">
+      <div class="supersection-content">
+        <section>
+          <header>
+            <h2>Worker Function</h2>
+            <button id="worker-thread-code-edit">Edit</button>
+          </header>
+          <textarea id="worker-thread-code" style="display: none"></textarea>
+          <pre><code class="language-js" id="worker-thread-code-view"></code></pre>
+        </section>
+
+        <section>
+          <header>
+            <h2>Main Thread</h2>
+          </header>
+          <div class="content">
+            <h3 id="clock-title">
+              Current Time
+            </h3>
+            <time id="clock">
+              <span></span>
+              <span>:</span>
+              <span></span>
+              <span>:</span>
+              <span></span>
+              <span>.</span>
+              <span></span>
+            </time>
+          </div>
+        </section>
+      </div>
+
+      <button id="run-worker">
+        Run worker
+      </button>
+
+      <div id="loading" style="display: none;">
+        <div class="lds-ellipsis"><div></div><div></div><div></div><div></div></div>
+      </div>
+    </div>
+
+    <script>
+      function twoDigits(number) {
+        if (number < 10) {
+          return '0' + number
+        }
+        return String(number)
+      }
+
+      function threeDigits(number) {
+        if (number < 10) {
+          return '00' + number
+        }
+        if (number < 100) {
+          return '0' + number
+        }
+        return String(number)
+      }
+
+      function renderClock() {
+        const clock = document.getElementById('clock')
+        const now = new Date()
+        clock.children[0].textContent = twoDigits(now.getHours())
+        clock.children[2].textContent = twoDigits(now.getMinutes())
+        clock.children[4].textContent = twoDigits(now.getSeconds())
+        clock.children[6].textContent = threeDigits(now.getMilliseconds())
+      }
+
+      const scheduleNextFrame = () => {
+        requestAnimationFrame(() => {
+          renderClock()
+          scheduleNextFrame()
+        })
+      }
+
+      renderClock()
+      scheduleNextFrame()
+
+      function toggleEdit() {
+        const codeEditor = document.getElementById('worker-thread-code')
+        const codeViewer = document.getElementById('worker-thread-code-view').parentNode
+        if (codeEditor.style.display !== 'none') {
+          codeEditor.style.display = 'none';
+          codeViewer.style.display = 'block';
+          document.getElementById('worker-thread-code-edit').textContent = 'Edit'
+          document.getElementById('worker-thread-code-edit').className = ''
+          document.getElementById('worker-thread-code-view').innerHTML = Prism.highlight(
+            document.getElementById('worker-thread-code').value,
+            Prism.languages.javascript,
+            'javascript'
+          )
+        } else {
+          codeEditor.style.display = 'block';
+          codeViewer.style.display = 'none';
+          document.getElementById('worker-thread-code-edit').textContent = 'Save'
+          document.getElementById('worker-thread-code-edit').className = 'selected'
+        }
+      }
+
+      document.getElementById('worker-thread-code-edit').onclick = toggleEdit
+
+function fn() {
+  const startedAt = Date.now()
+  let i = 0
+  while (Date.now() < startedAt + 1.5 * 1000) {
+    i++
+  }
+  return i
+}
+
+      function resetFn(fn) {
+        document.getElementById('worker-thread-code').value = fn.toString().replace(/^[^{]*{/, 'function() {')
+        document.getElementById('worker-thread-code-view').innerHTML = document.getElementById('worker-thread-code').value
+      }
+
+      function getFnCodeBody(fnCode) {
+        fnCode.replace(/^[^{]*{/, '')
+          .replace(/}[^}]*$/, '')
+      }
+
+      resetFn(fn)
+
+      let latestFnBody = getFnCodeBody(document.getElementById('worker-thread-code').value)
+
+      function setLoading(loading) {
+        if (loading) {
+          document.getElementById('loading').style.display = 'inline-block'
+          document.getElementById('run-worker').disabled = true
+          document.getElementById('worker-thread-code-edit').disabled = true
+        } else {
+          document.getElementById('loading').style.display = 'none'
+          document.getElementById('run-worker').disabled = false
+          document.getElementById('worker-thread-code-edit').disabled = false
+        }
+      }
+
+      document.getElementById('run-worker').addEventListener('click', () => {
+        try {
+          // If is editing, exit edit mode.
+          const codeEditor = document.getElementById('worker-thread-code')
+          if (codeEditor.style.display !== 'none') {
+            toggleEdit()
+          }
+
+          // Compile the function code.
+          let fn_
+          const fnCode = document.getElementById('worker-thread-code').value
+          console.log('---------------------------------------')
+          console.log('-             Editor Code             -')
+          console.log('---------------------------------------')
+          console.log(fnCode)
+          try {
+            fnBody = fnCode
+              .replace(/^[^{]*{/, '')
+              .replace(/}[^}]*$/, '')
+            console.log('---------------------------------------')
+            console.log('-       Extracted Function Body       -')
+            console.log('---------------------------------------')
+            console.log(fnBody)
+            fn_ = new Function(fnBody)
+            latestFnBody = fnBody
+          } catch (error) {
+            if (fnCode === fn.toString()) {
+              console.error(error)
+              resetFn(fn)
+              fn_ = new Function(getFnCodeBody(fn.toString()))
+            } else {
+              alert(error)
+              console.error(error)
+              fn_ = undefined
+            }
+          }
+          if (fn_) {
+            // Run the function.
+            setLoading(true)
+            const workerFn = workerFunction(fn_)
+            workerFn.callOnce().then((result) => {
+              alert(result === undefined ? 'Finished' : 'Result: ' + result)
+              setLoading(false)
+            }, (error) => {
+              console.error(error)
+              alert("There was an error. See console output for the error stack trace.")
+              setLoading(false)
+            })
+          }
+        } catch (error) {
+          console.error(error)
+          alert("There was an error. See console output for the error stack trace.")
+        }
+      })
+    </script>
+  </body>
+</html>

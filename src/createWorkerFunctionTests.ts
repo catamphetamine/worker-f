@@ -1,10 +1,9 @@
 import { expect, test } from 'vitest'
 
-import createStreamingWorkerFunction from './createStreamingWorkerFunction.ts'
+import createStreamingWorkerFunction, { type Send } from './createStreamingWorkerFunction.ts'
 import createNonStreamingWorkerFunction from './createWorkerFunction.ts'
 
 import type { CreateWorkerInEnvironment } from './createWorkerFunction.common.d.ts'
-import type { Send } from './exportTypes.d.ts'
 
 const INTER_THREAD_COMMUNICATION_DELAY = 100
 const TESTING_ERROR_MESSAGE = 'This is a test'
@@ -14,24 +13,24 @@ export default function runTests(env: CreateWorkerInEnvironment) {
 		const workerFn = createNonStreamingWorkerFunction(env, (a: number, b: number) => a + b)
 		await expect(async () => await workerFn.call(1, 2)).rejects.toThrow('Not started')
 		workerFn.start()
-		expect(() => workerFn.start()).toThrow('Already started')
+		expect(() => workerFn.start()).toThrow('Was started')
 		expect(await workerFn.call(1, 2)).toEqual(3)
 		workerFn.stop()
 		// Stopping a function multiple times doesn't throw any error.
-		// expect(() => workerFn.stop()).toThrow('Already stopped')
+		// expect(() => workerFn.stop()).toThrow('Was stopped')
 		workerFn.stop()
-		await expect(async () => await workerFn.call(1, 2)).rejects.toThrow('Already stopped')
+		await expect(async () => await workerFn.call(1, 2)).rejects.toThrow('Was stopped')
 	})
 
 	test('create and call a function once', async () => {
 		const workerFn = createNonStreamingWorkerFunction(env, (a: number, b: number) => a + b)
 		await expect(async () => await workerFn.call(1, 2)).rejects.toThrow('Not started')
 		expect(await workerFn.callOnce(1, 2)).toEqual(3)
-		expect(() => workerFn.start()).toThrow('Already stopped')
-		await expect(async () => await workerFn.callOnce(1, 2)).rejects.toThrow('Already stopped')
-		await expect(async () => await workerFn.call(1, 2)).rejects.toThrow('Already stopped')
+		expect(() => workerFn.start()).toThrow('Was stopped')
+		await expect(async () => await workerFn.callOnce(1, 2)).rejects.toThrow('Was stopped')
+		await expect(async () => await workerFn.call(1, 2)).rejects.toThrow('Was stopped')
 		// Stopping a function multiple times doesn't throw any error.
-		// expect(() => workerFn.stop()).toThrow('Already stopped')
+		// expect(() => workerFn.stop()).toThrow('Was stopped')
 		workerFn.stop()
 	})
 
@@ -64,9 +63,9 @@ export default function runTests(env: CreateWorkerInEnvironment) {
 		})
 		expect(() => workerFn.send([1, 2])).toThrow('Not started')
 		workerFn.start()
-		expect(() => workerFn.onOutput(() => {})).toThrow('Already started')
-		expect(() => workerFn.onError(() => {})).toThrow('Already started')
-		expect(() => workerFn.start()).toThrow('Already started')
+		expect(() => workerFn.onOutput(() => {})).toThrow('Was started')
+		expect(() => workerFn.onError(() => {})).toThrow('Was started')
+		expect(() => workerFn.start()).toThrow('Was started')
 		workerFn.send([1, 2])
 		expect(responseCounter).toEqual(0)
 		workerFn.send([1, 2])
@@ -74,9 +73,50 @@ export default function runTests(env: CreateWorkerInEnvironment) {
 		expect(responseCounter).toEqual(4)
 		workerFn.stop()
 		// Stopping a function multiple times doesn't throw any error.
-		// expect(() => workerFn.stop()).toThrow('Already stopped')
+		// expect(() => workerFn.stop()).toThrow('Was stopped')
 		workerFn.stop()
-		expect(() => workerFn.send([1, 2])).toThrow('Already stopped')
+		expect(() => workerFn.send([1, 2])).toThrow('Was stopped')
+	})
+
+	test('not allow changing dependencies of an already-aliased function', async () => {
+		// Dependency.
+		const c = 1
+
+		// Create a function and assign an alias.
+
+		const workerFn = createNonStreamingWorkerFunction(env, (a: number, b: number) => a + b + c)
+
+		workerFn.addDependencies(() => [c])
+		workerFn.alias('sum')
+
+		expect(() => {
+			workerFn.alias('a+b')
+		}).toThrow('Has alias')
+
+		expect(() => {
+			workerFn.addDependencies(() => [TESTING_ERROR_MESSAGE])
+		}).toThrow('Has alias')
+
+		// Create a function from an alias.
+
+		const workerFn2 = createNonStreamingWorkerFunction(env, 'sum')
+
+		expect(() => {
+			workerFn2.alias('a+b')
+		}).toThrow('Has alias')
+
+		expect(() => {
+			workerFn2.addDependencies(() => [TESTING_ERROR_MESSAGE])
+		}).toThrow('Has alias')
+
+		// Test that an alias also captures the dependencies.
+		expect(await workerFn2.callOnce(1, 2)).toEqual(4)
+	})
+
+	test('throw when alias is not found', async () => {
+		expect(() => {
+			createNonStreamingWorkerFunction(env, 'alias-not-exists')
+		}).toThrow('Not found')
 	})
 
 	test('catch error when called', async () => {
@@ -172,29 +212,42 @@ export default function runTests(env: CreateWorkerInEnvironment) {
 	})
 
 	test('create transfer list for output result (call)', async () => {
-		const workerFn = createNonStreamingWorkerFunction(env, () => {
-			const buffer = new ArrayBuffer(1)
-			const view = new Uint8Array(buffer)
-			view.fill(255)
-			setTimeout(() => {
-				if (buffer.byteLength !== 0) {
-					throw new Error('Expected buffer to have been transferred (call)')
-				}
-			}, 0)
-			return buffer
-		})
+		const test = async (alias?: string) => {
+			let workerFn = createNonStreamingWorkerFunction(env, () => {
+				const buffer = new ArrayBuffer(1)
+				const view = new Uint8Array(buffer)
+				view.fill(255)
+				setTimeout(() => {
+					if (buffer.byteLength !== 0) {
+						throw new Error('Expected output buffer to have been transferred (call)')
+					}
+				}, 0)
+				return buffer
+			})
 
-		workerFn.outputTransferList((buffer) => [buffer])
+			workerFn.outputTransferList((buffer) => [buffer])
 
-		workerFn.start()
+			if (alias) {
+				workerFn.alias(alias)
+				workerFn = createNonStreamingWorkerFunction(env, alias)
+			}
 
-		const buffer = await workerFn.call()
-		expect(buffer.byteLength).toEqual(1)
+			workerFn.start()
 
-		// Wait for the `setTimeout()` call in the function body to finish.
-		await delay(INTER_THREAD_COMMUNICATION_DELAY)
+			const buffer = await workerFn.call()
+			expect(buffer.byteLength).toEqual(1)
 
-		workerFn.stop()
+			// Wait for the `setTimeout()` call in the function body to finish.
+			await delay(INTER_THREAD_COMMUNICATION_DELAY)
+
+			workerFn.stop()
+		}
+
+		// Without alias.
+		await test()
+
+		// With alias.
+		await test('outputTransferList-call')
 	})
 
 	test('streaming function: able to respond before receiving any input data', async () => {
@@ -217,8 +270,8 @@ export default function runTests(env: CreateWorkerInEnvironment) {
 	})
 
 	test('create transfer list for input arguments (stream)', async () => {
-		const call = async (getInputTransferList?: (buffer: ArrayBuffer) => Transferable[]) => {
-			const workerFn = createStreamingWorkerFunction(env, (send: Send<ArrayBuffer>) => {
+		const test = async (alias?: string, getInputTransferList?: (buffer: ArrayBuffer) => Transferable[]) => {
+			let workerFn = createStreamingWorkerFunction(env, (send: Send<ArrayBuffer>) => {
 				return (buffer: ArrayBuffer) => {}
 			})
 
@@ -230,6 +283,11 @@ export default function runTests(env: CreateWorkerInEnvironment) {
 				workerFn.inputTransferList(getInputTransferList)
 			}
 
+			if (alias) {
+				workerFn.alias(alias)
+				workerFn = createStreamingWorkerFunction(env, alias)
+			}
+
 			workerFn.start()
 
 			expect(buffer.byteLength).toEqual(1)
@@ -239,12 +297,19 @@ export default function runTests(env: CreateWorkerInEnvironment) {
 			workerFn.stop()
 		}
 
-		// Without `inputTransferList`
-		await call()
+		// Without alias. Without `inputTransferList`.
+		await test(undefined)
 
-		// With `inputTransferList`
-		await call((buffer) => [buffer])
+		// Without alias. With `inputTransferList`.
+		await test(undefined, (buffer) => [buffer])
+
+		// With alias. Without `inputTransferList`.
+		await test('outputTransferList-stream')
+
+		// With alias. With `inputTransferList`.
+		await test('outputTransferList-stream', (buffer) => [buffer])
 	})
+
 
 	test('create transfer list for output result (stream)', async () => {
 		const workerFn = createStreamingWorkerFunction(env, (send: Send<ArrayBuffer>) => {
@@ -255,7 +320,7 @@ export default function runTests(env: CreateWorkerInEnvironment) {
 				send(buffer)
 				setTimeout(() => {
 					if (buffer.byteLength !== 0) {
-						throw new Error('Expected buffer to have been transferred (stream)')
+						throw new Error('Expected output buffer to have been transferred (stream)')
 					}
 				}, 0)
 			}
@@ -286,7 +351,7 @@ export default function runTests(env: CreateWorkerInEnvironment) {
 
 		expect(() => {
 			createNonStreamingWorkerFunction(env, 'fn2')
-		}).toThrow('Function not provided')
+		}).toThrow('Not found')
 
 		const workerFn = createNonStreamingWorkerFunction(env, 'fn1')
 		workerFn.start()
@@ -309,7 +374,7 @@ export default function runTests(env: CreateWorkerInEnvironment) {
 
 		expect(() => {
 			createStreamingWorkerFunction(env, 'fn2')
-		}).toThrow('Function not provided')
+		}).toThrow('Not found')
 
 		const workerFn = createStreamingWorkerFunction<number, number>(env, 'fn1')
 		let output: number | undefined

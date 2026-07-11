@@ -56,16 +56,16 @@ import stringifyFunctionReferences from './stringifyFunctionReferences.ts'
  * // so that it starts processing the data
  * // and later posts a message back to the main thread
  * // with the result of the calculation.
- * workerFn.push(inputData) // (optional) add `transferList` argument.
+ * workerFn.input(inputData) // (optional) add `transferList` argument.
  * ```
  *
  * @param {function} createWorkerInEnvironment — Creates a worker in a given environment. The worker must call globally-available `onMessage(data)` function every time it receives a message, and it must define a `var postMessage = (data) => void` function that posts a message to the parent (main) thread.
- * @param {function} createInputHandler — A "creator" that creates a function that will be called with message data every time a message is sent to this worker. The "creator" function receives a single argument — a function that posts data back to the main thread, with two arguments: `data` and (optional) `transferList`.
+ * @param {function} createInputHandler — A "creator" that creates a function that will be called with message data every time a message is sent to this worker. The "creator" function receives a single argument — a function that posts data back to the main thread, with two arguments: `outputData` and (optional) `transferList`.
  * @param {function} onError — This function will be called every time when there was an error while processing an incoming message. It would be logical to call `worker.terminate()` inside this function.
  * @param {function} onOutput — This function will be called every time when done processing an incoming message.
  * @param {function} getFromCache — Could be used to add caching. Has no arguments. Returns the cached value.
  * @param {function} setInCache — Could be used to add caching. Receives the value to cache as an argument. Doesn't return anything.
- * @returns {Worker} — An object with methods: `start(getDependenciesFunctionOrArrayOfGetDependenciesFunctions)`, `stop()`, `push(data, [transferList])`. Calling `stop()` requests termination of the worker. Calling `stop()` multiple times is safe and will not throw any errors.
+ * @returns {Worker} — An object with methods: `start(getDependenciesFunctionOrArrayOfGetDependenciesFunctions)`, `stop()`, `input(data, [transferList])`. Calling `stop()` requests termination of the worker. Calling `stop()` multiple times is safe and will not throw any errors.
  */
 export default function createWorker<Input, Output>(
 	createWorkerInEnvironment: CreateWorkerInEnvironment,
@@ -87,22 +87,19 @@ export default function createWorker<Input, Output>(
 	) => {
 		// A worker can't be started twice or restarted after being stopped.
 		if (started) {
-			throw new Error('Already started')
+			throw new Error('Was started')
 		}
 
 		started = true
 
 		const cacheValue = getFromCache()
-		const cachedCodeAndVars = cacheValue && cacheValue.codeAndVars
+		const cachedCodeAndVars = cacheValue && cacheValue._
 		const codeAndVars = cachedCodeAndVars || getCodeAndVars(createInputHandler, arrayOfGetDependenciesFunctions)
 		if (!cachedCodeAndVars) {
-			setInCache({ codeAndVars })
+			setInCache({ _: codeAndVars })
 		}
 
-		const {
-			code,
-			vars
-		} = codeAndVars
+		const [code, vars] = codeAndVars
 
 		// Cache accessors for use in `createWorkerInEnvironment`.
 		const getOtherFromCache = () => {
@@ -136,7 +133,7 @@ export default function createWorker<Input, Output>(
 		// creation of same type of worker (if there'll ever be one).
 		//
 		if (vars) {
-			worker.push(vars, dependenciesTransferList)
+			worker.ingest(vars, dependenciesTransferList)
 		}
 	}
 
@@ -145,13 +142,13 @@ export default function createWorker<Input, Output>(
 		stop: () => {
 			worker.stop()
 		},
-		push: (data: unknown, transferList?: Transferable[]) => {
-			worker.push(data, transferList)
+		ingest: (data: unknown, transferList?: Transferable[]) => {
+			worker.ingest(data, transferList)
 		}
 	}
 }
 
-const JAVASCRIPT_CODE_ADDITIONAL_BEFORE_CREATE_MESSAGE_HANDLER_FUNCTION_CODE =
+const JAVASCRIPT_CODE_BEFORE_CREATE_INPUT_HANDLER_FUNCTION =
 	// Handles any messages that're sent from the main thread.
 	'var onMessage = function(data) {' +
 		// The first message from the main thread will initialize the variables.
@@ -163,33 +160,28 @@ const JAVASCRIPT_CODE_ADDITIONAL_BEFORE_CREATE_MESSAGE_HANDLER_FUNCTION_CODE =
 		// by a custom message handler returned from the supplied "creator" function.
 		'onMessage = ('
 
-const JAVASCRIPT_CODE_ADDITIONAL_AFTER_CREATE_MESSAGE_HANDLER_FUNCTION_CODE =
+const JAVASCRIPT_CODE_AFTER_CREATE_INPUT_HANDLER_FUNCTION =
 		')(postMessage)' +
 	'}'
 
 function getCodeAndVars<MessageData, Response>(
 	createInputHandler: CreateInputHandler<MessageData, Response>,
 	arrayOfGetDependenciesFunctions: GetDependencies[]
-) {
-	const {
-		functionDefinitions,
-		vars
-	} = createCodeAndVars(arrayOfGetDependenciesFunctions)
+): CodeAndVars {
+	const [functionDefinitions, vars] = createFunctionsCodeAndVars(arrayOfGetDependenciesFunctions)
 
 	// Create javascript code of the worker.
-	return {
-		code:
-			functionDefinitions +
-			';' +
-			JAVASCRIPT_CODE_ADDITIONAL_BEFORE_CREATE_MESSAGE_HANDLER_FUNCTION_CODE +
-			createInputHandler.toString() +
-			JAVASCRIPT_CODE_ADDITIONAL_AFTER_CREATE_MESSAGE_HANDLER_FUNCTION_CODE,
+	const code =
+		functionDefinitions +
+		';' +
+		JAVASCRIPT_CODE_BEFORE_CREATE_INPUT_HANDLER_FUNCTION +
+		createInputHandler.toString() +
+		JAVASCRIPT_CODE_AFTER_CREATE_INPUT_HANDLER_FUNCTION
 
-		vars
-	}
+	return [code, vars]
 }
 
-function createCodeAndVars(arrayOfGetDependenciesFunctions: GetDependencies[]) {
+function createFunctionsCodeAndVars(arrayOfGetDependenciesFunctions: GetDependencies[]): CodeAndVars {
 	let funcs: Record<string, string> = {}
 	let vars: Record<string, unknown> = {}
 
@@ -214,25 +206,20 @@ function createCodeAndVars(arrayOfGetDependenciesFunctions: GetDependencies[]) {
 		}
 	}
 
-	return {
-		functionDefinitions: Object.keys(funcs).map((functionName) => {
-			return functionName + '=' + funcs[functionName]
-		}).join(';'),
+	const functionDefinitions = Object.keys(funcs).map((functionName) => {
+		return functionName + '=' + funcs[functionName]
+	}).join(';')
 
-		vars
-	}
+	return [functionDefinitions, vars]
 }
 
-interface CodeAndVars {
-	code: string;
-	vars: Record<string, unknown>;
-}
+type CodeAndVars = [string, Record<string, unknown>]
 
 interface CacheValue {
-	codeAndVars?: CodeAndVars;
+	_?: CodeAndVars;
 	other?: any;
 }
 
-type CreateInputHandler<InputData, OutputData> = (
-	send: (outputData: OutputData, transferList?: Transferable[]) => void
-) => (inputData: InputData) => void
+type CreateInputHandler<Input, Output> = (
+	send: (output: Output, transferList?: Transferable[]) => void
+) => (input: Input) => void

@@ -20,14 +20,14 @@ test('`/node/stream` export: create and call a function', async (t) => {
 		output = output_
 	})
 	workerFn.start()
-	t.throws(() => workerFn.start(), 'Already started')
+	t.throws(() => workerFn.start(), 'Was started')
 	await workerFn.send(1)
 	t.equal(output, undefined)
 	await delay(INTER_THREAD_COMMUNICATION_DELAY)
 	t.equal(output, 1)
 	workerFn.stop()
 	workerFn.stop()
-	t.throws(() => workerFn.send(1), 'Already stopped')
+	t.throws(() => workerFn.send(1), 'Was stopped')
 })
 
 async function throwsAsync(t: Test, func: Function, message: string) {

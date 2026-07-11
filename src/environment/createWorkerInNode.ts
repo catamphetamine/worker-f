@@ -17,7 +17,7 @@ import type { EnvironmentWorker } from '../createWorkerFunction.common.d.ts'
  * @param {function} setInCache — Could be used to add caching. Receives the value to cache as an argument. Doesn't return anything.
  * @param {function} onError — This function will be called every time when there was an error while processing an incoming message. It would be logical to call `worker.terminate()` inside this function.
  * @param {function} onOutput — This function will be called every time when done processing an incoming message.
- * @returns {Worker} — An object with methods: `push(data, transferList)`, `stop()`.
+ * @returns {Worker} — An object with methods: `ingest(data, transferList)`, `stop()`.
  */
 export default function createWorkerInNode<OutputData>(
 	javascriptCode: string,
@@ -81,7 +81,7 @@ export default function createWorkerInNode<OutputData>(
 
   return {
 		stop,
-		push: worker.postMessage.bind(worker)
+		ingest: worker.postMessage.bind(worker)
 	}
 }
 

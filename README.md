@@ -4,11 +4,15 @@
 
 Runs a function in a separate thread in a web browser or Node.js.
 
+[Demo](https://catamphetamine.gitlab.io/worker-f/)
+
 ## Why
 
 * The code is universal and could be run in any environment: in a web browser or Node.js. The easy-to-use API hides the complexity of dealing with each particular environment.
 
 * Doesn't require moving code to a separate file for it to be able to run in a worker. This prevents introducing the unnecessary and redundant concept of being able to access a "filesystem" or having to run a "web server". The code must not concern itself with such things that're completely irrelevant to its purpose. It shouldn't even know that a concept of a "file path" exists. Running a function in a separate thread should be as simple as it is in other programming languages.
+
+* Why use workers at all? In a web browser, it's about not freezing the app while doing "heavy computation". In Node.js, it's about not freezing the server while doing "heavy computation". And while freezing an app in a web browser is somewhat bearable, the main appeal of Node.js from the point of its creation has been that it doesn't "fork" the process for each incoming HTTP request, outperforming "classic" web servers by using an "event loop" instead, which quickly backstabs if that "event loop" is accidentally blocked by a "heavy computation".
 
 ## Install
 
@@ -235,8 +239,8 @@ To "cache" a function's source code for creating future workers, call `.alias()`
 const c = () => 1
 const sum = (a, b) => a + b + c()
 
-const sumFn_ = workerFunction(sum)
-sumFn_.addDependencies(() => [c])
+const sumFn = workerFunction(sum)
+sumFn.addDependencies(() => [c])
 
 // Calling `.alias()` creates a snapshot of this worker function.
 // After assigning an alias, one could instantiate this type of worker function from the snapshot.
@@ -246,15 +250,18 @@ sumFn_.addDependencies(() => [c])
 // because it won't have to redo the stringification of the function body and any of its dependencies.
 // Does it really matter performance-wise? I didn't bother checking.
 //
-sumFn_.alias('sum')
+sumFn.alias('sum')
 
-// Create a new worker function by the alias.
-const sumFn = workerFunction<Args, Result>('sum')
+// (optional)
 await sumFn.callOnce(2, 3) === 6
 
-// Create another worker function by same alias.
+// Create a new worker function by the alias.
 const sumFn2 = workerFunction<Args, Result>('sum')
 await sumFn2.callOnce(4, 5) === 10
+
+// Create a new worker function by the alias.
+const sumFn3 = workerFunction<Args, Result>('sum')
+await sumFn3.callOnce(6, 7) === 14
 ```
 
 <!--

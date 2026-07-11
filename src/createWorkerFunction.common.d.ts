@@ -1,7 +1,7 @@
 export type GetDependencies = () => any[]
 
 export interface EnvironmentWorker {
-	push(data: any, transferList?: readonly Transferable[]): void;
+	ingest(data: any, transferList?: readonly Transferable[]): void;
 	stop(): void;
 }
 
@@ -11,7 +11,7 @@ export interface UniversalWorker {
 		dependenciesTransferList?: Transferable[]
 	): void;
 	stop(): void;
-	push(data: unknown, transferList?: Transferable[]): void;
+	ingest(data: unknown, transferList?: Transferable[]): void;
 }
 
 export type CreateWorkerInEnvironment = <Output>(

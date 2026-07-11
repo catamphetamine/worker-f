@@ -33,6 +33,9 @@ npm-debug.log
 # bundle folder is just used to run it in a basic demo page
 /bundle/
 
+# website files
+/website/
+
 # build-time scripts
 /build-scripts/
 
