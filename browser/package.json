@@ -2,7 +2,7 @@
   "private": true,
   "name": "worker-f/browser",
   "version": "1.0.0",
-  "main": "./../commonjs/export/browser/index.js",
+  "main": "./index.cjs",
   "module": "./../lib/export/browser/index.js",
   "types": "./../lib/export/browser/index.d.ts",
   "type": "module",
@@ -10,7 +10,7 @@
     ".": {
       "types": "./../lib/export/browser/index.d.ts",
       "import": "./../lib/export/browser/index.js",
-      "require": "./../commonjs/export/browser/index.js"
+      "require": "./index.cjs"
     }
   },
   "sideEffects": false

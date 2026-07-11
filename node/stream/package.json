@@ -2,7 +2,7 @@
   "private": true,
   "name": "worker-f/node/stream",
   "version": "1.0.0",
-  "main": "./../../commonjs/export/node/stream/index.js",
+  "main": "./index.cjs",
   "module": "./../../lib/export/node/stream/index.js",
   "types": "./../../lib/export/node/stream/index.d.ts",
   "type": "module",
@@ -10,7 +10,7 @@
     ".": {
       "types": "./../../lib/export/node/stream/index.d.ts",
       "import": "./../../lib/export/node/stream/index.js",
-      "require": "./../../commonjs/export/node/stream/index.js"
+      "require": "./index.cjs"
     }
   },
   "sideEffects": false

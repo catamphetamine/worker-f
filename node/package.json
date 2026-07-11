@@ -2,7 +2,7 @@
   "private": true,
   "name": "worker-f/node",
   "version": "1.0.0",
-  "main": "./../commonjs/export/node/index.js",
+  "main": "./index.cjs",
   "module": "./../lib/export/node/index.js",
   "types": "./../lib/export/node/index.d.ts",
   "type": "module",
@@ -10,7 +10,7 @@
     ".": {
       "types": "./../lib/export/node/index.d.ts",
       "import": "./../lib/export/node/index.js",
-      "require": "./../commonjs/export/node/index.js"
+      "require": "./index.cjs"
     }
   },
   "sideEffects": false

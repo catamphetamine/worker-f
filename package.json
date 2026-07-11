@@ -1,28 +1,28 @@
 {
   "name": "worker-f",
-  "version": "0.1.9",
+  "version": "0.1.10",
   "description": "Runs a function in a separate thread in a web browser or Node.js",
   "type": "module",
   "exports": {
     "./browser": {
       "types": "./lib/export/browser/index.d.ts",
       "import": "./lib/export/browser/index.js",
-      "require": "./commonjs/export/browser/index.js"
+      "require": "./browser/index.cjs"
     },
     "./browser/stream": {
       "types": "./lib/export/browser/stream/index.d.ts",
       "import": "./lib/export/browser/stream/index.js",
-      "require": "./commonjs/export/browser/stream/index.js"
+      "require": "./browser/stream/index.cjs"
     },
     "./node": {
       "types": "./lib/export/node/index.d.ts",
       "import": "./lib/export/node/index.js",
-      "require": "./commonjs/export/node/index.js"
+      "require": "./node/index.cjs"
     },
     "./node/stream": {
       "types": "./lib/export/node/stream/index.d.ts",
       "import": "./lib/export/node/stream/index.js",
-      "require": "./commonjs/export/node/stream/index.js"
+      "require": "./node/stream/index.cjs"
     },
     "./package.json": "./package.json"
   },
