@@ -44,3 +44,16 @@ npm-debug.log
 
 # `vitest` test data
 /.vitest-attachments/
+
+# sources
+/src/
+
+# GitLab
+.gitlab-ci.yml
+
+# Build TypeScript configuration
+tsconfig.json
+tsconfig.build.json
+
+# `vitest` config
+vitest.config.json
