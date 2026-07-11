@@ -2,7 +2,7 @@
 // and then refactored according to my personal taste. Also added comments.
 // https://github.com/101arrowz/fflate/blob/master/src/index.ts
 
-import type { GetDependencies } from './createWorkerFunction.common.d.ts'
+import type { GetDependencies } from './createWorker.ts'
 
 /**
  * In a given list of dependencies, it stringifies any functions to their javascript source code strings.

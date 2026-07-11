@@ -4,7 +4,7 @@
 
 import { Worker } from 'node:worker_threads'
 
-import type { EnvironmentWorker } from '../createWorkerFunction.common.d.ts'
+import type { EnvironmentWorker } from '../createWorker.ts'
 
 /**
  * Creates a worker in Node.js.

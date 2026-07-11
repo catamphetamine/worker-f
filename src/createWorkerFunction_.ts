@@ -1,5 +1,4 @@
-import type { GetDependencies, UniversalWorker, CreateWorkerInEnvironment } from './createWorkerFunction.common.ts'
-import createWorker from './createWorker.ts'
+import createWorker, { type GetDependencies, type UniversalWorker, type CreateWorkerInEnvironment } from './createWorker.ts'
 
 export default function createWorkerFunction_<
 	Fn,

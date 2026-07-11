@@ -2,7 +2,7 @@
 // and then refactored according to my personal taste. Also added comments.
 // https://github.com/101arrowz/fflate/blob/master/src/worker.ts
 
-import type { EnvironmentWorker } from '../createWorkerFunction.common.d.ts'
+import type { EnvironmentWorker } from '../createWorker.ts'
 
 /**
  * Creates a worker in a web browser.

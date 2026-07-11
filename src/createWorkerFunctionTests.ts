@@ -1,9 +1,8 @@
 import { expect, test } from 'vitest'
 
+import type { CreateWorkerInEnvironment } from './createWorker.ts'
 import createStreamingWorkerFunction, { type Send } from './createStreamingWorkerFunction.ts'
 import createNonStreamingWorkerFunction from './createWorkerFunction.ts'
-
-import type { CreateWorkerInEnvironment } from './createWorkerFunction.common.d.ts'
 
 const INTER_THREAD_COMMUNICATION_DELAY = 150
 const TESTING_ERROR_MESSAGE = 'This is a test'

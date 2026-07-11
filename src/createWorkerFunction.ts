@@ -1,4 +1,4 @@
-import type { CreateWorkerInEnvironment } from './createWorkerFunction.common.ts'
+import type { CreateWorkerInEnvironment } from './createWorker.ts'
 import createWorkerFunction_, { type WorkerFunctionBase } from './createWorkerFunction_.ts'
 
 type SyncFn<Args extends Array<unknown>, Result> = (...args: Args) => Result

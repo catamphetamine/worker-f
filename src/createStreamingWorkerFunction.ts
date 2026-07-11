@@ -1,4 +1,4 @@
-import type { CreateWorkerInEnvironment } from './createWorkerFunction.common.d.ts'
+import type { CreateWorkerInEnvironment } from './createWorker.ts'
 import createWorkerFunction_, { type WorkerFunctionBase } from './createWorkerFunction_.ts'
 
 type InputHandler<Input> = (input: Input) => unknown

@@ -1,10 +1,3 @@
-import type {
-	CreateWorkerInEnvironment,
-	GetDependencies,
-	EnvironmentWorker,
-	UniversalWorker
-} from './createWorkerFunction.common.d.ts'
-
 import stringifyFunctionReferences from './stringifyFunctionReferences.ts'
 
 /**
@@ -223,3 +216,27 @@ interface CacheValue {
 type CreateInputHandler<Input, Output> = (
 	send: (output: Output, transferList?: Transferable[]) => void
 ) => (input: Input) => void
+
+export type GetDependencies = () => any[]
+
+export interface EnvironmentWorker {
+	ingest(data: any, transferList?: readonly Transferable[]): void;
+	stop(): void;
+}
+
+export interface UniversalWorker {
+	start(
+		arrayOfGetDependenciesFunctions: GetDependencies[],
+		dependenciesTransferList?: Transferable[]
+	): void;
+	stop(): void;
+	ingest(data: unknown, transferList?: Transferable[]): void;
+}
+
+export type CreateWorkerInEnvironment = <Output>(
+	javascriptCode: string,
+	getFromCache: () => any | undefined,
+	setInCache: (value: any) => void,
+	onError: (error: unknown) => void,
+	onOutput: (output: Output) => void
+) => EnvironmentWorker
