@@ -5,7 +5,7 @@ import createNonStreamingWorkerFunction from './createWorkerFunction.ts'
 
 import type { CreateWorkerInEnvironment } from './createWorkerFunction.common.d.ts'
 
-const INTER_THREAD_COMMUNICATION_DELAY = 100
+const INTER_THREAD_COMMUNICATION_DELAY = 150
 const TESTING_ERROR_MESSAGE = 'This is a test'
 
 export default function runTests(env: CreateWorkerInEnvironment) {

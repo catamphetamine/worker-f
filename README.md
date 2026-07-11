@@ -27,15 +27,10 @@ Basic usage:
 ```js
 const workerFn = workerFunction((a, b) => a + b)
 
-workerFn.start()
-
-await workerFn.call(1, 2) === 3
-await workerFn.call(4, 5) === 9
-
-workerFn.stop()
+await workerFn.callOnce(1, 2) === 3
 ```
 
-Advanced usage scenarios, like "streaming", are described further in this document.
+Advanced usage scenarios like "calling multiple times", "streaming", "caching", "transferring data" are described further in this document.
 
 ## Import
 
@@ -59,9 +54,23 @@ const workerFn = workerFunction((a, b) => a + b)
 
 ## API
 
+### Call Once
+
+Use this when the function will only be called once. Attempting to call the function second time will throw an error.
+
+The function could be synchronous or asynchronous.
+
+```js
+import workerFunction from 'worker-f/node'
+
+const workerFn = workerFunction((a, b) => a + b)
+
+await workerFn.callOnce(1, 2) === 3
+```
+
 ### Call
 
-Calls a function with arguments and returns a result.
+When the function will be called multiple times, it should be started, then called as many times as needed, then stopped.
 
 ```js
 import workerFunction from 'worker-f/node'
@@ -76,25 +85,9 @@ await workerFn.call(4, 5) === 9
 workerFn.stop()
 ```
 
-The function can be called multiple times until stopped.
-
-The function could be synchronous or asynchronous — doesn't matter.
-
 If the function [rejects](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Promise) or throws an error, it will automatically stop.
 
 If a developer forgets to stop a worker function that is no longer used, it will still stop automatically when the code no longer holds any "[reference](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Guide/Memory_management)" to it. It will also stop automatically when the web browser tab is closed, or the Node.js process is killed. But until stopped, it will keep holding its memory.
-
-### Call Once
-
-Use this when the function will only be called once. No need to start or stop the function manually — it all happens automatically. Attempting to call the function second time will throw an error.
-
-```js
-import workerFunction from 'worker-f/node'
-
-const workerFn = workerFunction((a, b) => a + b)
-
-await workerFn.callOnce(1, 2) === 3
-```
 
 ### Stream
 

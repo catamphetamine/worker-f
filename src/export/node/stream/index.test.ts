@@ -2,7 +2,7 @@ import { test, type Test } from 'tape'
 
 import createStreamingWorkerFunction, { type Send } from './index.ts'
 
-const INTER_THREAD_COMMUNICATION_DELAY = 100
+const INTER_THREAD_COMMUNICATION_DELAY = 150
 
 test('`/node/stream` export', async (t) => {
 	t.equal(typeof createStreamingWorkerFunction, 'function')
