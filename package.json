@@ -1,6 +1,6 @@
 {
   "name": "worker-f",
-  "version": "0.1.5",
+  "version": "0.1.6",
   "description": "Runs a function in a separate thread in a web browser or Node.js",
   "type": "module",
   "exports": {
