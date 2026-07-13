@@ -1,6 +1,6 @@
 {
   "name": "worker-f",
-  "version": "0.1.10",
+  "version": "0.1.11",
   "description": "Runs a function in a separate thread in a web browser or Node.js",
   "type": "module",
   "exports": {
@@ -57,6 +57,7 @@
     "@rollup/plugin-terser": "^1.0.0",
     "@types/node": "^26.0.1",
     "@types/react": "^19.2.17",
+    "@vitest/browser-playwright": "^4.1.9",
     "core-js": "^3.22.5",
     "cross-env": "^10.1.0",
     "npm-run-all": "^4.1.5",
@@ -82,8 +83,5 @@
   "bugs": {
     "url": "https://gitlab.com/catamphetamine/worker-f/issues"
   },
-  "homepage": "https://gitlab.com/catamphetamine/worker-f#readme",
-  "dependencies": {
-    "@vitest/browser-playwright": "^4.1.9"
-  }
+  "homepage": "https://gitlab.com/catamphetamine/worker-f#readme"
 }
