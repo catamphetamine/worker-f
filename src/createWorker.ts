@@ -64,7 +64,7 @@ export default function createWorker<Input, Output>(
 	createWorkerInEnvironment: CreateWorkerInEnvironment,
 	createInputHandler: CreateInputHandler<Input, Output>,
 	onError: (error: unknown) => void,
-	onOutput: (output: Output) => void,
+	onOutput: (inputSentTimestampAndInputReceivedTimestampAndOutputSentTimestampAndOutput:InputSentTimestampAndInputReceivedTimestampAndOutputSentTimestampAndOutput<Output>) => void,
 	getFromCache: () => CacheValue | undefined,
 	setInCache: (value: CacheValue) => void
 ): UniversalWorker {
@@ -213,8 +213,15 @@ interface CacheValue {
 	other?: any;
 }
 
+export type InputSentTimestampAndInputReceivedTimestampAndOutputSentTimestampAndOutput<Output> = [number, number, number, Output]
+
+export type SendOutput<Output> = (
+	inputSentTimestampAndInputReceivedTimestampAndOutputSentTimestampAndOutput: InputSentTimestampAndInputReceivedTimestampAndOutputSentTimestampAndOutput<Output>,
+	transferList?: Transferable[]
+) => void
+
 type CreateInputHandler<Input, Output> = (
-	send: (output: Output, transferList?: Transferable[]) => void
+	send: SendOutput<Output>
 ) => (input: Input) => void
 
 export type GetDependencies = () => any[]

@@ -21,7 +21,7 @@ export default function createStreamingWorkerFunction<Input, Output>(
 		stop: () => void,
 		started: boolean,
 		stopped: boolean,
-		sendToWorker: ([input]: [Input]) => void,
+		sendToWorker: (inputArgs: [Input]) => void,
 		mustHaveStarted: () => void,
 		mustNotHaveStarted: () => void,
 		mustNotHaveStopped: () => void
@@ -60,7 +60,7 @@ export default function createStreamingWorkerFunction<Input, Output>(
 	// i.e. it shouldn't reference anything outside of its body.
 	const createInputHandler = (
 		fn: StreamingFn<Input, Output>,
-		send: (output: Output) => void
+		send: Send<Output>
 	) => {
 		const inputHandler = fn(send)
 		return ([input]: [Input]) => {

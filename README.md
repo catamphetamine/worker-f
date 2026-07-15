@@ -20,6 +20,8 @@ Runs a function in a separate thread in a web browser or Node.js.
 npm install worker-f
 ```
 
+Alternatively, it could be included on a web page [directly](#cdn) via a `<script/>` tag.
+
 ## Use
 
 Basic usage:
@@ -331,13 +333,15 @@ How large is "large-enough"?
 
 * For JSON objects, the deeper the object is, the more costly it is to "serialize" and "deserialize" it back. There're some [benchmarks](https://surma.dev/things/is-postmessage-slow) from 2019 where it shows how "serializing"/"deserializing" a `10 MB` JSON object with `6` levels of nesting is about `50 ms` on a desktop or `100 ms` on a phone.
 
-* For `ArrayBuffer`s, the cloning is said to be "[incredibly quick](https://github.com/GoogleChromeLabs/buffer-backed-object)" without any further details.
+* For `ArrayBuffer`s, "cloning" is said to be "[incredibly quick](https://github.com/GoogleChromeLabs/buffer-backed-object)" without any further details.
 
 So the short answer is: "I personally don't really know or care". The rule of thumb is to keep the data being sent between the main thread and the worker thread to a minimum.
 
-Sidenote: The "cloning" is "synchronous" so it blocks the main thread until it finishes cloning.
+To assess input/output "cloning" performance, a worker function exposes two properties — `inputLatency` and `outputLatency` (in milliseconds). Both these properties are `undefined` until the function outputs anything back to the main thread.
 
-## Transfer List
+Because "cloning" is "synchronous", it blocks the main thread until it finishes cloning input/output data. This means that passing huge chunks of data between the main thread and the worker thread is only viable through [transfer](#transfer) so that it doesn't block the main thread for too long, if that's a concern.
+
+## Transfer
 
 When passing `ArrayBuffer`s, there's an optional feature called "[transfer](https://developer.mozilla.org/en-US/docs/Web/API/Web_Workers_API/Transferable_objects)". When it "transfers" a buffer, it doesn't clone it, but instead it simply "transfers" the ownership of the buffer from the "main thread" to the "worker thread", and vice versa, which is a "free" operation. Although note that after a buffer has been "transferred", it's no longer usable in the code that "transferred" it.
 
@@ -430,6 +434,26 @@ workerFn.transferDependency((dependency, setDependencyValue) => {
 When using "call" API, if the function [rejects](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Promise) or throws an error, the returned `Promise` will be rejected and the worker function will automatically stop.
 
 When using "stream" API, the optional `.onError()` listener will be called and the worker function will automatically stop.
+
+## CDN
+
+To include this library directly via a `<script/>` tag on a page, one can use any npm CDN service, e.g. [unpkg.com](https://unpkg.com) or [jsdelivr.com](https://jsdelivr.com)
+
+```html
+<script src="https://unpkg.com/worker-f@0.1.x/bundle/worker-f.min.js"></script>
+
+<script src="https://unpkg.com/worker-f@0.1.x/bundle/worker-f-stream.min.js"></script>
+
+<script>
+  const workerFn = workerFunction((a, b) => a + b)
+
+  const workerFnStream = workerFunctionStream((send) => {
+    return (input) => {
+      send(input*input)
+    }
+  })
+</script>
+```
 
 ## Development
 

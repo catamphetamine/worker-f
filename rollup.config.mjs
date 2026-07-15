@@ -34,7 +34,7 @@ export default [
     ],
     output: {
       format: 'umd',
-      name: 'workerFunction',
+      name: 'workerFunctionStream',
       file: 'bundle/worker-f-stream.min.js',
       sourcemap: true
     }

@@ -23,7 +23,7 @@ export default function createWorkerFunction<Args extends Array<unknown>, Result
 		stop: () => void,
 		started: boolean,
 		stopped: boolean,
-		sendToWorker: (args: Args) => void,
+		sendToWorker: (inputArgs: Args) => void,
 		mustHaveStarted: () => void,
 		mustNotHaveStarted: () => void,
 		mustNotHaveStopped: () => void

@@ -1,4 +1,10 @@
-import createWorker, { type GetDependencies, type UniversalWorker, type CreateWorkerInEnvironment } from './createWorker.ts'
+import createWorker, {
+	type GetDependencies,
+	type UniversalWorker,
+	type CreateWorkerInEnvironment,
+	type SendOutput,
+	type InputSentTimestampAndInputReceivedTimestampAndOutputSentTimestampAndOutput
+} from './createWorker.ts'
 
 export default function createWorkerFunction_<
 	Fn,
@@ -180,11 +186,18 @@ export default function createWorkerFunction_<
 
 	// Sends input data to the worker.
 	const sendToWorker = (inputArgs: InputArgs) => {
-		worker.ingest(inputArgs, inputTransferList(...inputArgs))
+		worker.ingest([Date.now(), inputArgs], inputTransferList(...inputArgs))
 	}
+
+	// These two variables are defined here just to work around
+	// TypeScript compiler error message.
+	let inputLatency: number | undefined
+	let outputLatency: number | undefined
 
 	// Declare a worker function. It will be returned from this function.
 	const workerFn = {
+		inputLatency,
+		outputLatency,
 		/**
 		 * Adds external dependencies.
 		 * These dependencies must not change after the function is started.
@@ -256,29 +269,42 @@ export default function createWorkerFunction_<
 	}
 
 	worker = createWorker(
-		// Creates a worker in a specific environment.
+		// Creates a worker in a specific environment such as a web browser or Node.js.
 		createWorkerInEnvironment,
 		// This function will be executed in the worker thread.
 		// It will be stringified and injected in the worker source code.
+		// It must create an input handler function.
 		(
-			send_: (output: Output, transferList?: Transferable[]) => void
+			// This function sends output from the worker thread to the main thread.
+			sendOutput_: SendOutput<Output>
 		) => {
-			const send = (output: Output) => {
-				send_(output, outputTransferList(output))
+			let inputSentTimestamp = 0
+			let inputReceivedTimestamp = 0
+			const sendOutput = (output: Output) => {
+				sendOutput_([inputSentTimestamp, inputReceivedTimestamp, Date.now(), output], outputTransferList(output))
 			}
-			return createInputHandler(fn, send)
+			const inputHandler = createInputHandler(fn, sendOutput)
+			return ([inputSentAt, input]: [number, InputArgs]) => {
+				inputSentTimestamp = inputSentAt
+				inputReceivedTimestamp = Date.now()
+				return inputHandler(input)
+			}
 		},
-		// This function will be executed in the main thread.
+		// This function will be executed in the main thread
+		// when an error is received from the worker.
 		// Currently, we are in the main thread.
 		(error: unknown) => {
 			if (!stopped) {
 				handleError(error)
 			}
 		},
-		// This function will be executed in the main thread.
+		// This function will be executed in the main thread
+		// when output is received from the worker.
 		// Currently, we are in the main thread.
-		(output: Output) => {
+		([inputSentTimestamp, inputReceivedTimestamp, outputTimestamp, output]: InputSentTimestampAndInputReceivedTimestampAndOutputSentTimestampAndOutput<Output>) => {
 			if (!stopped) {
+				workerFn.inputLatency = inputReceivedTimestamp - inputSentTimestamp
+				workerFn.outputLatency = Date.now() - outputTimestamp
 				handleOutput(output)
 			}
 		},
@@ -314,6 +340,10 @@ export interface WorkerFunctionBase<InputArgs extends Array<unknown>, Output> {
 	): void;
 
 	alias(alias: string): void;
+
 	start(): void;
 	stop(): void;
+
+	inputLatency?: number;
+	outputLatency?: number;
 }

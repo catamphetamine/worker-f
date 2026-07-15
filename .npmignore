@@ -31,7 +31,8 @@ npm-debug.log
 *.sublime-workspace
 
 # bundle folder is just used to run it in a basic demo page
-/bundle/
+/bundle/*.html
+/bundle/lib/
 
 # website files
 /website/
