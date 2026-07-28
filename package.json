@@ -1,6 +1,6 @@
 {
   "name": "worker-f",
-  "version": "0.1.12",
+  "version": "0.1.13",
   "description": "Runs a function in a separate thread in a web browser or Node.js",
   "type": "module",
   "exports": {
@@ -57,7 +57,7 @@
     "@rollup/plugin-terser": "^1.0.0",
     "@types/node": "^26.0.1",
     "@types/react": "^19.2.17",
-    "@vitest/browser-playwright": "^4.1.9",
+    "@vitest/browser-playwright": "^4.1.10",
     "core-js": "^3.22.5",
     "cross-env": "^10.1.0",
     "npm-run-all": "^4.1.5",
@@ -67,7 +67,7 @@
     "tape": "^5.10.2",
     "tsx": "^4.22.4",
     "typescript": "^6.0.3",
-    "vitest": "^4.1.9"
+    "vitest": "^4.1.10"
   },
   "repository": {
     "type": "git",

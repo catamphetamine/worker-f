@@ -12,6 +12,8 @@ Runs a function in a separate thread in a web browser or Node.js.
 
 * Doesn't require moving code to a separate file for it to be able to run in a worker. This prevents introducing the unnecessary and redundant concept of being able to access a "filesystem" or having to run a "web server". The code must not concern itself with such things that're completely irrelevant to its purpose. It shouldn't even know that a concept of a "file path" exists. Running a function in a separate thread should be as simple as it is in other programming languages.
 
+* Because it removes the unnecessary requirement of being able to access a "filesystem" or running a "web server", it becomes possible to use workers in "libraries" ("packages"), not just end-user applications. For example, [`fflate`](https://www.npmjs.com/package/fflate) uses workers to utilize multiple CPU cores (and to prevent freezing of the page) when zipping or unzipping large archives.
+
 * Why use workers at all? In a web browser, it's about not freezing the app while doing "heavy computation". In Node.js, it's about not freezing the server while doing "heavy computation". And while freezing an app in a web browser is somewhat bearable, the main appeal of Node.js from the point of its creation has been that it doesn't "fork" the process for each incoming HTTP request, outperforming "classic" web servers by using an "event loop" instead, which quickly backstabs if that "event loop" is accidentally blocked by a "heavy computation".
 
 ## Install
@@ -95,17 +97,22 @@ If a developer forgets to stop a worker function that is no longer used, it will
 
 If a function is designed to produce multiple outputs over time, it should use "stream" API rather than "call" API.
 
-```js
-import workerFunction, { type Send } from 'worker-f/node/stream'
+To use "stream" API, add `/stream` postfix to the `import` path.
 
-const workerFn = workerFunction(
-  // Use `send()` to output anything from the function
+```js
+import workerFunctionStream, { type Send } from 'worker-f/node/stream' // or 'worker-f/browser/stream'
+
+const workerFn = workerFunctionStream(
+  // Use the supplied `send()` function to "stream" output data
+  // from the worker function to the main thread
   (send: Send<number>) => {
-    // The code here will be run on `start()`
-    // and anything declared here will exist until `stop()`,
-    // so this is the place to define the function's state
+    // This code will only be run once on `workerFn.start()`
+    // and any variables declared here will exist until `workerFn.stop()`,
+    // so this is good place to declare any of the function's state variables
     let counter = 0
-    // Return an "input handler" function
+    // Return an "input handler" function.
+    // The "input handler" function should use the `send()` function
+    // to output data back to the main thread.
     return (input: number) => {
       counter++
       send(input*input)
@@ -116,7 +123,7 @@ const workerFn = workerFunction(
 // The sum of all responses from the function
 let total = 0
 
-// How many responses it expects from the function
+// How many responses it still expects from the function
 let pending = 0
 
 // Listen to the responses from the function
@@ -132,11 +139,12 @@ workerFn.onOutput((output) => {
   }
 })
 
-// Listen to any errors thrown by the function
+// (optional)
+// A developer might choose to intercept any errors that're thrown from the worker function.
+// Even if an error is intercepted, the worker function will still automatically stop.
+// By default, any error will just propagate to the main thread as an "unhandled rejection".
 workerFn.onError((error) => {
-  // Handle the error here
-  console.error(error)
-  // The worker function will automatically stop after this
+  console.log('Worker function exited with an error', error)
 })
 
 workerFn.start()
@@ -337,9 +345,55 @@ How large is "large-enough"?
 
 So the short answer is: "I personally don't really know or care". The rule of thumb is to keep the data being sent between the main thread and the worker thread to a minimum.
 
-To assess input/output "cloning" performance, a worker function exposes two properties — `inputLatency` and `outputLatency` (in milliseconds). Both these properties are `undefined` until the function outputs anything back to the main thread.
+To assess input/output "cloning" performance, a worker function exposes two properties — `inputLatency` and `outputLatency` (in milliseconds). They're updated every time the function has been [called](#call): `inputLatency` is how long it took for the main thread to send data to the worker thread, and `outputLatency` is how long it took for the worker thread to send data back to the main thread.
 
-Because "cloning" is "synchronous", it blocks the main thread until it finishes cloning input/output data. This means that passing huge chunks of data between the main thread and the worker thread is only viable through [transfer](#transfer) so that it doesn't block the main thread for too long, if that's a concern.
+```js
+const workerFn = workerFunction((a, b) => a + b)
+
+workerFn.start()
+
+await workerFn.call(1, 2) === 3
+
+console.log(workerFn.inputLatency)
+console.log(workerFn.outputLatency)
+
+await workerFn.call(3, 4) === 7
+
+console.log(workerFn.inputLatency)
+console.log(workerFn.outputLatency)
+
+workerFn.stop()
+```
+
+Why are `inputLatency` and `outputLatency` an important factor? Because "cloning" is "synchronous", it blocks the main thread every time when cloning input/output data. This means that passing huge chunks of data between the main thread and the worker thread could "block" the main thread for even longer than it would take to actually process those chunks of data, defeating the whole purpose of using a worker to improve performance or responsiveness of an app. So this means that sending large chunks of data is only viable via [transfer](#transfer) of binary data because only it doesn't block the main thread. And if data is not binary, but still large, the only option is to transfer it in small-enough chunks via [streaming](#stream) so that the blocking of the main thread is not as noticeable.
+
+```js
+import workerFunctionStream, { type Send } from 'worker-f/node/stream'
+
+const workerFn = workerFunctionStream(
+  (send: Send<number>) => {
+    return (input: number) => {
+      send(input*input)
+    }
+  }
+)
+
+workerFn.onOutput((output) => {
+  // `inputLatency` is the "latency" of the latest input.
+  // `outputLatency` is the "latency" of the latest output.
+  console.log(workerFn.inputLatency)
+  console.log(workerFn.outputLatency)
+})
+
+workerFn.start()
+
+workerFn.send(1)
+workerFn.send(2)
+workerFn.send(3)
+
+// (later) When the application is being closed
+workerFn.stop()
+```
 
 ## Transfer
 

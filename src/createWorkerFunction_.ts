@@ -278,8 +278,8 @@ export default function createWorkerFunction_<
 			// This function sends output from the worker thread to the main thread.
 			sendOutput_: SendOutput<Output>
 		) => {
-			let inputSentTimestamp = 0
-			let inputReceivedTimestamp = 0
+			let inputSentTimestamp = -1
+			let inputReceivedTimestamp = -1
 			const sendOutput = (output: Output) => {
 				sendOutput_([inputSentTimestamp, inputReceivedTimestamp, Date.now(), output], outputTransferList(output))
 			}
@@ -303,7 +303,12 @@ export default function createWorkerFunction_<
 		// Currently, we are in the main thread.
 		([inputSentTimestamp, inputReceivedTimestamp, outputTimestamp, output]: InputSentTimestampAndInputReceivedTimestampAndOutputSentTimestampAndOutput<Output>) => {
 			if (!stopped) {
-				workerFn.inputLatency = inputReceivedTimestamp - inputSentTimestamp
+				// `createInputHandler()` function could call `send()` right away
+				// without waiting to receive any input.
+				// In such case, `inputLatency` should stay `undefined`.
+				if (inputSentTimestamp !== -1) {
+					workerFn.inputLatency = inputReceivedTimestamp - inputSentTimestamp
+				}
 				workerFn.outputLatency = Date.now() - outputTimestamp
 				handleOutput(output)
 			}

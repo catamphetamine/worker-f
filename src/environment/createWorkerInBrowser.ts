@@ -82,18 +82,39 @@ const JAVASCRIPT_CODE_ADDITIONAL =
   '}' + ';' +
   // Sends a message to the main thread.
   'var postMessage = self.postMessage' + ';' +
-  // Listen to any errors that occur inside the worker.
+  // Listen to any "synchronous" errors that occur inside the worker.
   'addEventListener("error",' +
     'function(event) {' +
+      'var error = event.error' + ';' +
       // The worker will halt execution (unless `event.preventDefault()` is called).
       // The error will be propagated to the main thread's console.
       // Notify the main thread about this error so that it could call the `callback`.
       'postMessage({' +
         ERROR_MESSAGE_PROPERTY_NAME + ':' + '[' +
-          'event.error.name' + ',' +
-          'event.error.message' + ',' +
-          'event.error.code' + ',' +
-          'event.error.stack' +
+          'error.name' + ',' +
+          'error.message' + ',' +
+          'error.code' + ',' +
+          'error.stack' +
+        ']' +
+      '})' +
+    '}' +
+  ')' + ';' +
+  // Listen to any "asynchronous" errors that occur inside the worker.
+  'addEventListener("unhandledrejection",' +
+    'function(event) {' +
+      // Prevent the default logging behavior in the browser console.
+      'event.preventDefault()' + ';' +
+      // Get the `error` instance.
+      'var error = event.reason instanceof Error ? event.reason : new Error(event.reason)' + ';' +
+      // The worker will halt execution (unless `event.preventDefault()` is called).
+      // The error will be propagated to the main thread's console.
+      // Notify the main thread about this error so that it could call the `callback`.
+      'postMessage({' +
+        ERROR_MESSAGE_PROPERTY_NAME + ':' + '[' +
+          'error.name' + ',' +
+          'error.message' + ',' +
+          'error.code' + ',' +
+          'error.stack' +
         ']' +
       '})' +
     '}' +

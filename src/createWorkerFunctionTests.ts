@@ -24,7 +24,11 @@ export default function runTests(env: CreateWorkerInEnvironment) {
 	test('create and call a function once', async () => {
 		const workerFn = createNonStreamingWorkerFunction(env, (a: number, b: number) => a + b)
 		await expect(async () => await workerFn.call(1, 2)).rejects.toThrow('Not started')
+		expect(workerFn.inputLatency).toBeUndefined()
+		expect(workerFn.outputLatency).toBeUndefined()
 		expect(await workerFn.callOnce(1, 2)).toEqual(3)
+		expect(workerFn.inputLatency).toBeTypeOf('number')
+		expect(workerFn.outputLatency).toBeTypeOf('number')
 		expect(() => workerFn.start()).toThrow('Was stopped')
 		await expect(async () => await workerFn.callOnce(1, 2)).rejects.toThrow('Was stopped')
 		await expect(async () => await workerFn.call(1, 2)).rejects.toThrow('Was stopped')
@@ -42,8 +46,12 @@ export default function runTests(env: CreateWorkerInEnvironment) {
 				count++
 			}
 		})
+		expect(workerFn.inputLatency).toBeUndefined()
+		expect(workerFn.outputLatency).toBeUndefined()
 		let responseCounter = 0
 		workerFn.onOutput((output) => {
+			expect(workerFn.inputLatency).toBeTypeOf('number')
+			expect(workerFn.outputLatency).toBeTypeOf('number')
 			responseCounter++
 			if (responseCounter === 1) {
 				expect(output === 3)
@@ -261,10 +269,14 @@ export default function runTests(env: CreateWorkerInEnvironment) {
 		})
 
 		expect(result).toBeUndefined()
+		expect(workerFn.inputLatency).toBeUndefined()
+		expect(workerFn.outputLatency).toBeUndefined()
 
 		workerFn.start()
 		await delay(INTER_THREAD_COMMUNICATION_DELAY)
 		expect(result).toEqual(1)
+		expect(workerFn.inputLatency).toBeUndefined()
+		expect(workerFn.outputLatency).toBeTypeOf('number')
 		workerFn.stop()
 	})
 
