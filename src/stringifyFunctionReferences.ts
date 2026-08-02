@@ -51,7 +51,15 @@ export default function stringifyFunctionReferences(getDependencies: GetDependen
 }
 
 /**
- * Returns the source code for a function (or class), provided that it will be referenced by `name`.
+ * Returns the source code for a function or a class.
+ *
+ * For non-"native" classes, the end result will depend on the name of the class,
+ * which should be passed as a second argument for that reason. Specifically,
+ * the name of the class will be used when defining its `prototype` properties.
+ *
+ * "Native" functions or classes will be stringified to their "native" global name.
+ * For example, a reference to `ArrayBuffer` will be stringified as `"ArrayBuffer"`.
+ *
  * @param {function} func
  * @param {string} name
  * @returns {string}
@@ -61,20 +69,25 @@ function getFunctionSourceCode(func: Function, name: string) {
 	// If the "function" is actually not a function but rather a class definition
 	// then it should also replace the class name in the definition of any of its methods.
 	if (func.prototype) {
-		// "Native" classes don't have javascript source code.
+		// "Native" classes don't have javascript source code because they're written in C++, etc.
 		// In such case, the source code for such class could be replaced with the class name itself,
 		// because "native" classes are globally available everywhere and printing a "native" class name
 		// is evaluated as the definition of such class, so there's no need to pass the definition as source code.
-		if (funcSourceCode.indexOf('[native code]') != -1) {
+		if (funcSourceCode.indexOf('[native code]') >= 0) {
 			// `funcSourceCode` example: "function DOMParser() { [native code] }"
 			const funcNameStartsAt = funcSourceCode.indexOf(' ', 'function'.length) + ' '.length
 			const funcNameEndsBefore = funcSourceCode.indexOf('(', funcNameStartsAt)
 			return funcSourceCode.slice(funcNameStartsAt, funcNameEndsBefore)
 		} else {
-			// Non-"native" classes will have all their method definitions printed.
-			// In those method definitions,
+			// The code of non-"native" classes will have to include the source code
+			// of all their `prototype` properties.
 			let code = funcSourceCode
 			for (const key in func.prototype) {
+				// Sidenote: For `TextDecoder` global class in Node.js, I saw it output a "weird" error
+				// `TypeError: Value of "this" must be of type TextDecoder`  when attempting to read `func.prototype["encoding"]`.
+				// Perhaps that's because the `encoding` property of `TextDecoder` is a "getter"
+				// rather than a property, and that "getter" function relies on `this` being `TextDecoder`:
+				// `get encoding() { return this.#encoding; }`.
 				code += ';' + name + '.prototype.' + key + '=' + func.prototype[key].toString()
 			}
 			return code

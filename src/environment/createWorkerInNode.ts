@@ -41,6 +41,20 @@ export default function createWorkerInNode<OutputData>(
 
 	// Create a worker.
   const worker = new Worker(code, { eval: true })
+		// The argument of an "error" event listener is an instance of the `Error` class.
+		// This is regardless of the actual custom error class that the original error was created from.
+		// The main thread will always receive any custom error as a vanilla JavaScript `Error` instance.
+		//
+		// Why:
+		//
+		// Node.js passes errors across the thread boundary using the HTML Structured Clone Algorithm.
+		// This algorithm clones the data rather than sharing the live reference. When serialization happens:
+		//
+		// * Built-in error types (like `Error`, `TypeError`, `RangeError`) preserve their original native class wrapper.
+		// * Custom, user-defined error classes lose their prototype chain.
+		// * The custom properties on the error object are copied over, but the cloned object’s
+		//   `constructor` is normalized back to the standard base `Error` class.
+		//
     .on('error', (error) => {
 			processedError = true
 			onError(error)
@@ -95,7 +109,7 @@ const JAVASCRIPT_CODE_ADDITIONAL =
 	'workerThreads.parentPort.on("message", function(data) {' +
 		'onMessage(data)' +
 	'})' + ';' +
-  // Sends a message to the main thread.
+  // Define a `postMessage()` function that will be used to send messages to the main thread.
 	'var postMessage = function(data, transferList) {' +
 		'workerThreads.parentPort.postMessage(data, transferList)' +
 	'}' + ';' +

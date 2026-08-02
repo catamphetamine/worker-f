@@ -104,36 +104,47 @@ import workerFunctionStream, { type Send } from 'worker-f/node/stream' // or 'wo
 
 const workerFn = workerFunctionStream(
   // Use the supplied `send()` function to "stream" output data
-  // from the worker function to the main thread
-  (send: Send<number>) => {
+  // from the worker function to the main thread.
+  // If you're using TypeScript, then you must declare the `send()` function's type
+  // to be the exported `Send` type with a "generic" that describes the argument
+  // that you will be passing to the `send()` function.
+  (send: Send<[number, number]>) => {
     // This code will only be run once on `workerFn.start()`
     // and any variables declared here will exist until `workerFn.stop()`,
-    // so this is good place to declare any of the function's state variables
-    let counter = 0
+    // so this is good place to declare any of the function's state variables.
+    let c = 0
     // Return an "input handler" function.
-    // The "input handler" function should use the `send()` function
-    // to output data back to the main thread.
-    return (input: number) => {
-      counter++
-      send(input*input)
+    // The "input handler" function is supposed to process the input in some way
+    // and then (optionally) use the `send()` function to output some result
+    // back to the main thread. Here's an example of an "input handler" function
+    // that calculates a sum of two numbers and sends it back to the main thread.
+    return (a: number, b: number) => {
+      // Just an example of updating the function's state — a simple counter.
+      c++
+      // Calculate a sum of the two input numbers and send the result back
+      // to the main thread along with the counter.
+      send([a + b, c])
     }
   }
 )
 
-// The sum of all responses from the function
-let total = 0
+// Stores the outputs of the function
+const sums = []
 
-// How many responses it still expects from the function
+// How many outputs it still expects from the function
 let pending = 0
 
-// Listen to the responses from the function
-workerFn.onOutput((output) => {
-  total += output
+// Listen to the outputs of the function
+workerFn.onOutput(([sum, c]) => {
+  sums[c - 1] = sum
   pending--
-  // When all responses are received
+  // When all outputs have been received
   if (pending === 0) {
     // Validate the end result
-    total === 14
+    sums.length === 3
+    sums[0] === 3
+    sums[1] === 7
+    sums[1] === 11
     // Stop the worker function
     workerFn.stop()
   }
@@ -150,18 +161,20 @@ workerFn.onError((error) => {
 workerFn.start()
 
 pending++
-workerFn.send(1) // 1 * 1 === 1
+workerFn.send(1, 2)
 
 pending++
-workerFn.send(2) // 2 * 2 === 4
+workerFn.send(3, 4)
 
 pending++
-workerFn.send(3) // 3 * 3 === 9
+workerFn.send(5, 6)
 ```
 
 ## External Dependencies
 
-Sometimes, a function is not "self-contained", and it references some variables or other functions from outside of the function body. In that case, those variables or functions must be specified as the function's "dependencies", or else it would throw a `ReferenceError: <name> is not defined`.
+An "isolated" function only uses the stuff that is defined within its body, and it never references anything from outside of its body. This is basically a requirement for any function that is to be extrated to a separate (worker) thread.
+
+But in practice that's not always the case. More likely, a worker function is going to reference some variables or classes or other functions that're declared outside of its body. In that case, those variables or classes or functions must be specified as the worker function's "dependencies", or else it would throw a `ReferenceError: <name> is not defined`.
 
 ```js
 // External variable
@@ -182,10 +195,10 @@ workerFn.addDependencies(() => [c, d])
 await workerFn.callOnce(1, 2) === 10
 ```
 
-Any external dependencies that're functions must either be "self-contained" functions or specify their own external dependencies in the `.addDependencies(...)` call. And the loop continues until the very last sub-sub-sub-dependency function is finally "self-contained".
+Any external dependencies that're functions (or classes) must either be "isolated" ones or specify their own external dependencies in an `.addDependencies(...)` call. And the loop continues until the very last sub-sub-sub-dependency function (or class) is finally "isolated".
 
 ```js
-// External function that is "self-contained" because it doesn't reference anything outside of its body
+// External function that is "isolated" because it doesn't reference anything outside of its body
 const d = () => 4
 
 // External function that references `d` which is outside of its body
@@ -205,7 +218,7 @@ workerFn.addDependencies(() => [c, d])
 await workerFn.callOnce(1, 2) === 10
 ```
 
-To reduce the number of external dependencies, one could put everyting into a single large "self-contained" function that doesn't reference anything outside of its body. Or if it does reference anything outside of its body, those references themselves must be "self-contained" functions that don't reference anything outside of their body, etc.
+To reduce the number of external dependencies, one could put everyting into a single large "isolated" function that doesn't reference anything outside of its body. Or if it does reference anything outside of its body, those references themselves must be "isolated" functions (or classes) that don't reference anything outside of their body, etc.
 
 With that in mind, one could see how specifying all the dependencies correctly could become a tedious task in a typical modular application where the code is spread over countless smaller modules, each of them importing other smaller modules, etc. So a better approach would be to just move everything — the function itself and most of its dependencies — into a single big "wrapper" function, as if we're back in 2000s, and then create a worker from it.
 
@@ -305,7 +318,7 @@ workerFn.onError((error) => {
 })
 
 // Send input data to the picked worker function.
-workerFn.send(123)
+workerFn.send(1, 2)
 
 // Return the worker to the pool here and unsubscribe from any responses or errors.
 // But what if the worker is still processing some previously received data.
@@ -345,7 +358,7 @@ How large is "large-enough"?
 
 So the short answer is: "I personally don't really know or care". The rule of thumb is to keep the data being sent between the main thread and the worker thread to a minimum.
 
-To assess input/output "cloning" performance, a worker function exposes two properties — `inputLatency` and `outputLatency` (in milliseconds). They're updated every time the function has been [called](#call): `inputLatency` is how long it took for the main thread to send data to the worker thread, and `outputLatency` is how long it took for the worker thread to send data back to the main thread.
+To assess input/output "cloning" performance, a worker function exposes two properties — `inputLatency` and `outputLatency` (in milliseconds). They're accessible from the main thread and are updated every time the function has been [called](#call): `inputLatency` is how long it took for the main thread to send data to the worker thread, and `outputLatency` is how long it took for the worker thread to send data back to the main thread.
 
 ```js
 const workerFn = workerFunction((a, b) => a + b)
@@ -372,13 +385,14 @@ import workerFunctionStream, { type Send } from 'worker-f/node/stream'
 
 const workerFn = workerFunctionStream(
   (send: Send<number>) => {
-    return (input: number) => {
-      send(input*input)
+    // Calculates a sum of two numbers.
+    return (a: number, b: number) => {
+      send(a + b)
     }
   }
 )
 
-workerFn.onOutput((output) => {
+workerFn.onOutput((sum) => {
   // `inputLatency` is the "latency" of the latest input.
   // `outputLatency` is the "latency" of the latest output.
   console.log(workerFn.inputLatency)
@@ -387,9 +401,9 @@ workerFn.onOutput((output) => {
 
 workerFn.start()
 
-workerFn.send(1)
-workerFn.send(2)
-workerFn.send(3)
+workerFn.send(1, 2)
+workerFn.send(3, 4)
+workerFn.send(5, 6)
 
 // (later) When the application is being closed
 workerFn.stop()
@@ -485,9 +499,13 @@ workerFn.transferDependency((dependency, setDependencyValue) => {
 
 ## Errors
 
-When using "call" API, if the function [rejects](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Promise) or throws an error, the returned `Promise` will be rejected and the worker function will automatically stop.
+Any errors thrown within a worker function will "bubble" to the main thread:
 
-When using "stream" API, the optional `.onError()` listener will be called and the worker function will automatically stop.
+* When using "call" API, if the function [rejects](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Promise) or throws an error, the returned `Promise` will be rejected and the worker function will automatically stop.
+
+* When using "stream" API, the optional `.onError(listener)` listener will be called and the worker function will automatically stop.
+
+But there's a catch: an `error` that "bubbles" from a worker function to the main thread will just be a "plain" JSON object rather than an instance of the original error class. This is because any error has to be "serialized" and then "de-serialized" in order to be sent from the worker thread to the main thread. So a "bubbled" `error` will still have all the properties of the original error, only that it will no longer be an instance of the original error class. Consider this when your application detects error type using `instanceof` operator, and perhaps resort to comparing an `error.name` property instead.
 
 ## CDN
 
@@ -502,8 +520,8 @@ To include this library directly via a `<script/>` tag on a page, one can use an
   const workerFn = workerFunction((a, b) => a + b)
 
   const workerFnStream = workerFunctionStream((send) => {
-    return (input) => {
-      send(input*input)
+    return (a, b) => {
+      send(a + b)
     }
   })
 </script>

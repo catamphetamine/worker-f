@@ -5,7 +5,6 @@ import createStreamingWorkerFunction, { type Send } from './createStreamingWorke
 import createNonStreamingWorkerFunction from './createWorkerFunction.ts'
 
 const INTER_THREAD_COMMUNICATION_DELAY = 150
-const TESTING_ERROR_MESSAGE = 'This is a test'
 
 export default function runTests(env: CreateWorkerInEnvironment) {
 	test('create and call a function', async () => {
@@ -38,12 +37,14 @@ export default function runTests(env: CreateWorkerInEnvironment) {
 	})
 
 	test('create and listen to a function', async () => {
-		const workerFn = createStreamingWorkerFunction(env, (send: Send<number>) => {
+		const workerFn = createStreamingWorkerFunction(env, (send: Send<[number, number] | string>) => {
 			let count = 0
+			// An streaming worker function could receive multiple arguments from the main thread.
 			return ([a, b]: [number, number]) => {
-				send(a + b + count)
-				send(a - b + count)
 				count++
+				// An streaming worker function could send multiple arguments to the main thread.
+				send([a + b, count])
+				send(String(a + b + count))
 			}
 		})
 		expect(workerFn.inputLatency).toBeUndefined()
@@ -54,13 +55,19 @@ export default function runTests(env: CreateWorkerInEnvironment) {
 			expect(workerFn.outputLatency).toBeTypeOf('number')
 			responseCounter++
 			if (responseCounter === 1) {
-				expect(output === 3)
+				expect(output).toBeInstanceOf(Array)
+				expect(output[0]).toEqual(3)
+				expect(output[1]).toEqual(1)
 			} else if (responseCounter === 2) {
-				expect(output === -1)
+				expect(output).toBeTypeOf('string')
+				expect(output).toEqual('4')
 			} else if (responseCounter === 3) {
-				expect(output === 4)
+				expect(output).toBeInstanceOf(Array)
+				expect(output[0]).toEqual(3)
+				expect(output[1]).toEqual(2)
 			} else if (responseCounter === 4) {
-				expect(output === 0)
+				expect(output).toBeTypeOf('string')
+				expect(output).toEqual('5')
 			} else {
 				throw new Error('Unexpected repsonse')
 			}
@@ -101,7 +108,11 @@ export default function runTests(env: CreateWorkerInEnvironment) {
 		}).toThrow('Has alias')
 
 		expect(() => {
-			workerFn.addDependencies(() => [TESTING_ERROR_MESSAGE])
+			workerFn.addDependencies(() => [
+				createTestError,
+				TestError,
+				TEST_ERROR_PROPERTIES
+			])
 		}).toThrow('Has alias')
 
 		// Create a function from an alias.
@@ -113,7 +124,11 @@ export default function runTests(env: CreateWorkerInEnvironment) {
 		}).toThrow('Has alias')
 
 		expect(() => {
-			workerFn2.addDependencies(() => [TESTING_ERROR_MESSAGE])
+			workerFn2.addDependencies(() => [
+				createTestError,
+				TestError,
+				TEST_ERROR_PROPERTIES
+			])
 		}).toThrow('Has alias')
 
 		// Test that an alias also captures the dependencies.
@@ -128,33 +143,52 @@ export default function runTests(env: CreateWorkerInEnvironment) {
 
 	test('catch error when called', async () => {
 		const workerFn = createNonStreamingWorkerFunction(env, (a: number, b: number) => {
-			throw new Error(TESTING_ERROR_MESSAGE)
+			throw createTestError()
 		})
-		workerFn.addDependencies(() => [TESTING_ERROR_MESSAGE])
+		workerFn.addDependencies(() => [
+				createTestError,
+				TestError,
+				TEST_ERROR_PROPERTIES
+			])
 		workerFn.start()
-		await expect(async () => await workerFn.call(1, 2)).rejects.toThrow(TESTING_ERROR_MESSAGE)
+		await expect(async () => await workerFn.call(1, 2)).rejects.toThrow(
+			expect.objectContaining(TEST_ERROR_PROPERTIES)
+		)
 	})
 
 	test('catch error when called once', async () => {
 		const workerFn = createNonStreamingWorkerFunction(env, (a: number, b: number) => {
-			throw new Error(TESTING_ERROR_MESSAGE)
+			throw createTestError()
 		})
-		workerFn.addDependencies(() => [TESTING_ERROR_MESSAGE])
-		await expect(async () => await workerFn.callOnce(1, 2)).rejects.toThrow(TESTING_ERROR_MESSAGE)
+		workerFn.addDependencies(() => [
+				createTestError,
+				TestError,
+				TEST_ERROR_PROPERTIES
+			])
+		await expect(async () => await workerFn.callOnce(1, 2)).rejects.toThrow(
+			expect.objectContaining(TEST_ERROR_PROPERTIES)
+		)
 	})
 
 	test('catch error when called listened', async () => {
 		const workerFn = createStreamingWorkerFunction(env, (send: Send<void>) => {
 			return (input: number) => {
-				throw new Error(TESTING_ERROR_MESSAGE)
+				throw createTestError()
 			}
 		})
-		workerFn.addDependencies(() => [TESTING_ERROR_MESSAGE])
+		workerFn.addDependencies(() => [
+				createTestError,
+				TestError,
+				TEST_ERROR_PROPERTIES
+			])
 		workerFn.onOutput((output) => {
 			throw new Error('Unexpected repsonse')
 		})
 		let errorCounter = 0
 		workerFn.onError((error) => {
+			expect(error).toEqual(
+				expect.objectContaining(TEST_ERROR_PROPERTIES)
+			)
 			errorCounter++
 		})
 		workerFn.start()
@@ -163,6 +197,13 @@ export default function runTests(env: CreateWorkerInEnvironment) {
 		await delay(INTER_THREAD_COMMUNICATION_DELAY)
 		expect(errorCounter).toEqual(1)
 		workerFn.stop()
+	})
+
+	test('add dependencies that\'re "native" global classes or functions', async () => {
+		const fn = (length: number) => new Uint8Array(length)
+		const workerFn = createNonStreamingWorkerFunction(env, fn)
+		const result = await workerFn.callOnce(1)
+		expect(result).toBeInstanceOf(Uint8Array)
 	})
 
 	test('add dependencies and dependencies of dependencies', async () => {
@@ -415,4 +456,20 @@ export default function runTests(env: CreateWorkerInEnvironment) {
 
 function delay(ms: number) {
 	return new Promise(resolve => setTimeout(resolve, ms))
+}
+
+const TEST_ERROR_PROPERTIES = {
+	message: 'This is a test',
+	name: 'TestError'
+}
+
+function createTestError() {
+	return new TestError(TEST_ERROR_PROPERTIES.message)
+}
+
+class TestError extends Error {
+	constructor(message: string) {
+		super(message)
+		this.name = TEST_ERROR_PROPERTIES.name
+	}
 }

@@ -42,13 +42,13 @@ export default function createWorkerInBrowser<OutputData>(
     const data = event.data
     const errorData = data ? data[ERROR_MESSAGE_PROPERTY_NAME] : undefined
     if (errorData) {
-      const [name, message, code, stack] = errorData
-      const error = new Error(message)
-      error.name = name; // This semicolon is required to prevent an error: "name is not a function" which is caused by an opening parenthesis on the next line.
-      // `code` property doesn't exist on `Error` class
-      // but it does exist in some of its subclasses.
-      (error as any).code = code
-      error.stack = stack
+      const error = new Error(errorData[0])
+      error.stack = errorData[1]
+      let i = 2
+      while (i < errorData.length) {
+        (error as any)[errorData[i][0]] = errorData[i][1]
+        i++
+      }
       onError(error)
 			// Terminate the worker thread to mimick Node.js's "unrecoverable" behavior.
       worker.terminate()
@@ -73,50 +73,73 @@ function createWorkerCodeUrl(javascriptCode: string) {
   )
 }
 
-const ERROR_MESSAGE_PROPERTY_NAME = '$error$'
+const ERROR_MESSAGE_PROPERTY_NAME = '$err$'
 
 const JAVASCRIPT_CODE_ADDITIONAL =
   // Listen to incoming messages from the main thread.
-  'self.onmessage = function(event) {' +
-    'onMessage(event.data)' +
+  'self.onmessage = function(evt) {' +
+    'onMessage(evt.data)' +
   '}' + ';' +
-  // Sends a message to the main thread.
+  // Reports an error to the main thread.
+  'function onErr(err_, msg) {' +
+    'var err = err_ instanceof Error ? err_ : new Error(msg)' + ';' +
+    'postMessage({' +
+      ERROR_MESSAGE_PROPERTY_NAME + ':' + '[' +
+        // `message` is a "non-enumerable" property of an `Error` class
+        // and it won't be present in `Object.keys(error)`.
+        'err.message' + ',' +
+        // `stack` is a "non-enumerable" property of an `Error` class
+        // and it won't be present in `Object.keys(error)`.
+        'err.stack' +
+      '].concat(' +
+        // Add any "rest" properties of the error such as `name` or `code`.
+        'Object.keys(err).map(' +
+          'function(k){' +
+            'return[k,err[k]]' +
+          '}' +
+        ')' +
+      ')' +
+    '})' +
+  '}' + ';' +
+  // Define a `postMessage()` function that will be used to send messages to the main thread.
   'var postMessage = self.postMessage' + ';' +
   // Listen to any "synchronous" errors that occur inside the worker.
+  //
+  // "The error event is fired on a Window object when a resource failed to load
+  //  or couldn't be used — for example if a script has an execution error."
+  //
+  // "This event is only generated for script errors thrown synchronously,
+  //  such as during initial loading or within event handlers.
+  //  If a promise was rejected (including an uncaught throw within an async function)
+  //  and no rejection handlers were attached, an `unhandledrejection` event is fired instead."
+  //
   'addEventListener("error",' +
-    'function(event) {' +
-      'var error = event.error' + ';' +
+    // `evt` argument is an instance of `ErrorEvent` class, which inherits from `Event` class.
+    // https://developer.mozilla.org/en-US/docs/Web/API/ErrorEvent
+    'function(evt) {' +
       // The worker will halt execution (unless `event.preventDefault()` is called).
       // The error will be propagated to the main thread's console.
       // Notify the main thread about this error so that it could call the `callback`.
-      'postMessage({' +
-        ERROR_MESSAGE_PROPERTY_NAME + ':' + '[' +
-          'error.name' + ',' +
-          'error.message' + ',' +
-          'error.code' + ',' +
-          'error.stack' +
-        ']' +
-      '})' +
+      'onErr(evt.error, evt.message)' +
     '}' +
   ')' + ';' +
   // Listen to any "asynchronous" errors that occur inside the worker.
+  //
+  // "The `unhandledrejection` event is sent to the global scope of a script
+  //  when a JavaScript Promise that has no rejection handler is rejected;
+  //  typically, this is the window, but may also be a Worker."
+  //
   'addEventListener("unhandledrejection",' +
-    'function(event) {' +
+    // `evt` argument is an instance of `PromiseRejectionEvent` class, which inherits from `Event` class.
+    // https://developer.mozilla.org/en-US/docs/Web/API/PromiseRejectionEvent
+    'function(evt) {' +
       // Prevent the default logging behavior in the browser console.
-      'event.preventDefault()' + ';' +
-      // Get the `error` instance.
-      'var error = event.reason instanceof Error ? event.reason : new Error(event.reason)' + ';' +
+      // https://developer.mozilla.org/en-US/docs/Web/API/Window/unhandledrejection_event#preventing_default_handling
+      'evt.preventDefault()' + ';' +
       // The worker will halt execution (unless `event.preventDefault()` is called).
       // The error will be propagated to the main thread's console.
       // Notify the main thread about this error so that it could call the `callback`.
-      'postMessage({' +
-        ERROR_MESSAGE_PROPERTY_NAME + ':' + '[' +
-          'error.name' + ',' +
-          'error.message' + ',' +
-          'error.code' + ',' +
-          'error.stack' +
-        ']' +
-      '})' +
+      'onErr(evt.reason, String(evt.reason))' +
     '}' +
   ')'
 

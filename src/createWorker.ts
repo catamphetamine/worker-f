@@ -199,6 +199,18 @@ function createFunctionsCodeAndVars(arrayOfGetDependenciesFunctions: GetDependen
 		}
 	}
 
+	// For each referenced "external" function (or class), define it as a global variable
+	// using the dependency name as the global variable's name
+	// and the source code of the function (or class) as the global variable's value.
+	//
+	// "Native" global classes or functions such as `ArrayBuffer` won't have any source code
+	// and it will be just their global name. This means that if someone passes something like
+	// `ArrayBuffer` as a dependency, it will produce code like `ArrayBuffer=ArrayBuffer`,
+	// which doesn't really make any sense, but it still works and it doesn't result in any bugs,
+	// so it's not handled in any special way. And if someone passes something like
+	// `const ab = ArrayBuffer` as a dependency, it will produce code like `ab=ArrayBuffer`,
+	// and in such case it does make sense.
+	//
 	const functionDefinitions = Object.keys(funcs).map((functionName) => {
 		return functionName + '=' + funcs[functionName]
 	}).join(';')
