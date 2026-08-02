@@ -134,7 +134,7 @@ const sums = []
 // How many outputs it still expects from the function
 let pending = 0
 
-// Listen to the outputs of the function
+// Listen to any output from the function
 workerFn.onOutput(([sum, c]) => {
   sums[c - 1] = sum
   pending--
@@ -151,9 +151,10 @@ workerFn.onOutput(([sum, c]) => {
 })
 
 // (optional)
-// A developer might choose to intercept any errors that're thrown from the worker function.
+// Intercept any errors that're thrown from the worker function.
 // Even if an error is intercepted, the worker function will still automatically stop.
-// By default, any error will just propagate to the main thread as an "unhandled rejection".
+// By default, if no `.onError()` listener is added, any error thrown from a worker function
+// will just propagate to the main thread as an "unhandled rejection", crashing the app.
 workerFn.onError((error) => {
   console.log('Worker function exited with an error', error)
 })
@@ -505,7 +506,9 @@ Any errors thrown within a worker function will "bubble" to the main thread:
 
 * When using "stream" API, the optional `.onError(listener)` listener will be called and the worker function will automatically stop.
 
-But there's a catch: an `error` that "bubbles" from a worker function to the main thread will just be a "plain" JSON object rather than an instance of the original error class. This is because any error has to be "serialized" and then "de-serialized" in order to be sent from the worker thread to the main thread. So a "bubbled" `error` will still have all the properties of the original error, only that it will no longer be an instance of the original error class. Consider this when your application detects error type using `instanceof` operator, and perhaps resort to comparing an `error.name` property instead.
+But there's a catch: an `error` that "bubbles" from a worker function to the main thread will have its class rewritten with generic `Error`, and it will no longer be an instance of the original error class. This is because any error has to be "serialized" and then "de-serialized" in order to be sent from the worker thread to the main thread. So a "bubbled" `error` will still retain all the properties of the original error, including `name`, but it will no longer be an instance of the original error class. Consider this when your application detects error type using `instanceof` operator, and perhaps resort to comparing `error.name` property instead.
+
+Also, if instead of throwing an `error`, a worker function sends it to the main thread as a usual value, then the `error` will neither retain its original class nor its original `name` property: the class will be rewritten with generic `Error`, and the `name` will be rewritten with `"Error"`.
 
 ## CDN
 

@@ -69,7 +69,7 @@ export default function runTests(env: CreateWorkerInEnvironment) {
 				expect(output).toBeTypeOf('string')
 				expect(output).toEqual('5')
 			} else {
-				throw new Error('Unexpected repsonse')
+				throw new Error('Unexpected response')
 			}
 		})
 		workerFn.onError((error) => {
@@ -141,19 +141,44 @@ export default function runTests(env: CreateWorkerInEnvironment) {
 		}).toThrow('Not found')
 	})
 
+	test('return error when called', async () => {
+		const workerFn = createNonStreamingWorkerFunction(env, (a: number, b: number) => {
+			return createTestError()
+		})
+		workerFn.addDependencies(() => [
+			createTestError,
+			TestError,
+			TEST_ERROR_PROPERTIES
+		])
+		workerFn.start()
+		const error = await workerFn.call(1, 2)
+		expect(error).toEqual(
+			expect.objectContaining({
+				...TEST_ERROR_PROPERTIES,
+				name: 'Error'
+			})
+		)
+		expect(error).toBeInstanceOf(Error)
+		expect(error).not.toBeInstanceOf(TestError)
+		workerFn.stop()
+	})
+
 	test('catch error when called', async () => {
 		const workerFn = createNonStreamingWorkerFunction(env, (a: number, b: number) => {
 			throw createTestError()
 		})
 		workerFn.addDependencies(() => [
-				createTestError,
-				TestError,
-				TEST_ERROR_PROPERTIES
-			])
+			createTestError,
+			TestError,
+			TEST_ERROR_PROPERTIES
+		])
 		workerFn.start()
 		await expect(async () => await workerFn.call(1, 2)).rejects.toThrow(
 			expect.objectContaining(TEST_ERROR_PROPERTIES)
 		)
+		// These two assertions could also be added here somehow:
+		// expect(error).toBeInstanceOf(Error)
+		// expect(error).not.toBeInstanceOf(TestError)
 	})
 
 	test('catch error when called once', async () => {
@@ -161,13 +186,16 @@ export default function runTests(env: CreateWorkerInEnvironment) {
 			throw createTestError()
 		})
 		workerFn.addDependencies(() => [
-				createTestError,
-				TestError,
-				TEST_ERROR_PROPERTIES
-			])
+			createTestError,
+			TestError,
+			TEST_ERROR_PROPERTIES
+		])
 		await expect(async () => await workerFn.callOnce(1, 2)).rejects.toThrow(
 			expect.objectContaining(TEST_ERROR_PROPERTIES)
 		)
+		// These two assertions could also be added here somehow:
+		// expect(error).toBeInstanceOf(Error)
+		// expect(error).not.toBeInstanceOf(TestError)
 	})
 
 	test('catch error when called listened', async () => {
@@ -177,18 +205,20 @@ export default function runTests(env: CreateWorkerInEnvironment) {
 			}
 		})
 		workerFn.addDependencies(() => [
-				createTestError,
-				TestError,
-				TEST_ERROR_PROPERTIES
-			])
+			createTestError,
+			TestError,
+			TEST_ERROR_PROPERTIES
+		])
 		workerFn.onOutput((output) => {
-			throw new Error('Unexpected repsonse')
+			throw new Error('Unexpected response')
 		})
 		let errorCounter = 0
 		workerFn.onError((error) => {
 			expect(error).toEqual(
 				expect.objectContaining(TEST_ERROR_PROPERTIES)
 			)
+			expect(error).toBeInstanceOf(Error)
+			expect(error).not.toBeInstanceOf(TestError)
 			errorCounter++
 		})
 		workerFn.start()
