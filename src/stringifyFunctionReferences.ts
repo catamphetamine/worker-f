@@ -27,24 +27,24 @@ export default function stringifyFunctionReferences(getDependencies: GetDependen
 	const functions: Record<string, string> = {}
 	const variables: Record<string, unknown> = {}
 
-  const references = getDependencies()
-  const getReferencesSourceCode = getDependencies.toString()
-  const referencedNames = getReferencesSourceCode.slice(getReferencesSourceCode.indexOf('[') + 1, getReferencesSourceCode.lastIndexOf(']')).replace(/\s+/g, '').split(',')
+	const references = getDependencies()
+	const getReferencesSourceCode = getDependencies.toString()
+	const referencedNames = getReferencesSourceCode.slice(getReferencesSourceCode.indexOf('[') + 1, getReferencesSourceCode.lastIndexOf(']')).replace(/\s+/g, '').split(',')
 
 	let i = 0
-  while (i < references.length) {
+	while (i < references.length) {
 		let name = referencedNames[i]
-    let value = references[i]
-    if (typeof value === 'function') {
+		let value = references[i]
+		if (typeof value === 'function') {
 			functions[name] = getFunctionSourceCode(value, name)
-    } else {
+		} else {
 			// Regular values don't need to be stringified because they could be just "cloned".
 			variables[name] = value
 		}
 		i++
-  }
+	}
 
-  return {
+	return {
 		functions,
 		variables
 	}
