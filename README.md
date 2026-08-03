@@ -508,7 +508,7 @@ Any errors thrown within a worker function will "bubble" to the main thread:
 
 But there's a catch: an `error` that "bubbles" from a worker function to the main thread will have its class rewritten with generic `Error`, and it will no longer be an instance of the original error class. This is because any error has to be "serialized" and then "de-serialized" in order to be sent from the worker thread to the main thread. So a "bubbled" `error` will still retain all the properties of the original error, including `name`, but it will no longer be an instance of the original error class. Consider this when your application detects error type using `instanceof` operator, and perhaps resort to comparing `error.name` property instead.
 
-Also, if instead of throwing an `error`, a worker function sends it to the main thread as a usual value, then the `error` will neither retain its original class nor its original `name` property: the class will be rewritten with generic `Error`, and the `name` will be rewritten with `"Error"`.
+Also, if instead of throwing an `error`, a worker function sends it to the main thread as a usual value, then the `error` will neither retain its original class nor any of its properties: the class will be reset to generic `Error`, `name` will be rewritten with `"Error"`, and any other properties will just be discarded.
 
 ## CDN
 

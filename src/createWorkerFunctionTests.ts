@@ -150,16 +150,19 @@ export default function runTests(env: CreateWorkerInEnvironment) {
 			TestError,
 			TEST_ERROR_PROPERTIES
 		])
+		// Start the worker function.
 		workerFn.start()
+		// Return (not throw) an error from the worker function.
 		const error = await workerFn.call(1, 2)
-		expect(error).toEqual(
-			expect.objectContaining({
-				...TEST_ERROR_PROPERTIES,
-				name: 'Error'
-			})
-		)
+		// Validate that the error properties have been reset.
+		expect(TEST_ERROR_PROPERTIES.code).toBeTypeOf('string')
+		expect(error.code).toBe(undefined)
+		expect(TEST_ERROR_PROPERTIES.name).not.toEqual('Error')
+		expect(error.name).toEqual('Error')
+		// Validate that the error class was reset to `Error`
 		expect(error).toBeInstanceOf(Error)
 		expect(error).not.toBeInstanceOf(TestError)
+		// Stop the worker function.
 		workerFn.stop()
 	})
 
@@ -490,7 +493,8 @@ function delay(ms: number) {
 
 const TEST_ERROR_PROPERTIES = {
 	message: 'This is a test',
-	name: 'TestError'
+	name: 'TestError',
+	code: 'TEST_CODE'
 }
 
 function createTestError() {
@@ -498,8 +502,11 @@ function createTestError() {
 }
 
 class TestError extends Error {
+	code: string
+
 	constructor(message: string) {
 		super(message)
 		this.name = TEST_ERROR_PROPERTIES.name
+		this.code = TEST_ERROR_PROPERTIES.code
 	}
 }
