@@ -50,6 +50,11 @@ export default function runTests(env: CreateWorkerInEnvironment) {
 		expect(workerFn.inputLatency).toBeUndefined()
 		expect(workerFn.outputLatency).toBeUndefined()
 		let responseCounter = 0
+		// First time adding an error listener — the listener doesn't do anything.
+		workerFn.onOutput((error) => {
+			expect(true).toEqual(false)
+		})
+		// First time adding an output listener — overwrites the first one.
 		workerFn.onOutput((output) => {
 			expect(workerFn.inputLatency).toBeTypeOf('number')
 			expect(workerFn.outputLatency).toBeTypeOf('number')
@@ -141,6 +146,20 @@ export default function runTests(env: CreateWorkerInEnvironment) {
 		}).toThrow('Not found')
 	})
 
+	test('clonable dependencies', async () => {
+		const workerFn = createNonStreamingWorkerFunction(env, (a: number, b: number) => a + b)
+		const a = 1
+		const b = 2
+		const c = true
+		const d = new Date()
+		const e = [1, 'a']
+		const f = { a: 1, b: [2] }
+		const g = new Uint8Array(8)
+		workerFn.addDependencies(() => [a, b, c, d, e, f, g])
+		workerFn.start()
+		workerFn.stop()
+	})
+
 	test('return error when called', async () => {
 		const workerFn = createNonStreamingWorkerFunction(env, (a: number, b: number) => {
 			return createTestError()
@@ -216,6 +235,11 @@ export default function runTests(env: CreateWorkerInEnvironment) {
 			throw new Error('Unexpected response')
 		})
 		let errorCounter = 0
+		// First time adding an error listener — the listener doesn't do anything.
+		workerFn.onError((error) => {
+			expect(true).toEqual(false)
+		})
+		// Second time adding an error listener — overwrites the first listener.
 		workerFn.onError((error) => {
 			expect(error).toEqual(
 				expect.objectContaining(TEST_ERROR_PROPERTIES)

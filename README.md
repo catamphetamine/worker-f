@@ -134,7 +134,8 @@ const sums = []
 // How many outputs it still expects from the function
 let pending = 0
 
-// Listen to any output from the function
+// Calling `.onOutput()` sets up a listener that will handle any output from the function.
+// Calling `.onOutput()` multiple times will just overwrite the listener.
 workerFn.onOutput(([sum, c]) => {
   sums[c - 1] = sum
   pending--
@@ -151,10 +152,16 @@ workerFn.onOutput(([sum, c]) => {
 })
 
 // (optional)
-// Intercept any errors that're thrown from the worker function.
+//
+// Calling `.onError()` sets up a listener that will intercept any errors
+// that're thrown from the worker function.
+//
+// Calling `.onError()` multiple times will just overwrite the error listener.
+//
 // Even if an error is intercepted, the worker function will still automatically stop.
 // By default, if no `.onError()` listener is added, any error thrown from a worker function
 // will just propagate to the main thread as an "unhandled rejection", crashing the app.
+//
 workerFn.onError((error) => {
   console.log('Worker function exited with an error', error)
 })
@@ -196,7 +203,9 @@ workerFn.addDependencies(() => [c, d])
 await workerFn.callOnce(1, 2) === 10
 ```
 
-Any external dependencies that're functions (or classes) must either be "isolated" ones or specify their own external dependencies in an `.addDependencies(...)` call. And the loop continues until the very last sub-sub-sub-dependency function (or class) is finally "isolated".
+Any external dependencies that're not functions (or classes) must be [clonable](https://developer.mozilla.org/en-US/docs/Web/API/Web_Workers_API/Structured_clone_algorithm), i.e. they can't be arrays of functions (or classes) or JSON objects with values that're functions (or classes), etc. Otherwise, it would throw a `DataCloneError`.
+
+Any external dependencies that're functions (or classes) must either be "isolated", or specify their own external dependencies in an `.addDependencies(...)` call, in which case the loop continues until the very last sub-sub-sub-dependency function (or class) is finally "isolated".
 
 ```js
 // External function that is "isolated" because it doesn't reference anything outside of its body

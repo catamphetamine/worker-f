@@ -4,6 +4,11 @@
 
 import type { GetDependencies } from './createWorker.ts'
 
+// An approximate regular expression of a javascript variable name letter.
+// `\w` covers `a-z`, `A-Z`, `0-9`, and `_`.
+// First letter can't be a digit, so this reg exp consists of two parts.
+const JAVASCRIPT_VARIABLE_NAME_REG_EXP = /^[$_\u0080-\uFFFFa-zA-Z][$_\u0080-\uFFFF\w]*$/
+
 /**
  * In a given list of dependencies, it stringifies any functions to their javascript source code strings.
  * It could've used simple `.toString()` if it wasn't for "minification" process which eventually renames
@@ -29,7 +34,18 @@ export default function stringifyFunctionReferences(getDependencies: GetDependen
 
 	const references = getDependencies()
 	const getReferencesSourceCode = getDependencies.toString()
-	const referencedNames = getReferencesSourceCode.slice(getReferencesSourceCode.indexOf('[') + 1, getReferencesSourceCode.lastIndexOf(']')).replace(/\s+/g, '').split(',')
+	const referencedNames = getReferencesSourceCode.slice(getReferencesSourceCode.indexOf('[') + 1, getReferencesSourceCode.lastIndexOf(']')).split(',').map(_ => _.trim())
+
+	// Although it doesn't seem to be reproducible in the tests,
+	// I did experience a strange bug when commenting out a dependency
+	// resulted in `referencedNames` still including the commented-out variable name.
+	// To work around that, it could either validate that `references.length === referencedNames.length`,
+	// or validate each referenced name for illegal characters (which includes "//").
+	for (const name of referencedNames) {
+		if (!JAVASCRIPT_VARIABLE_NAME_REG_EXP.test(name)) {
+			throw new Error(`Invalid dependency name: ${name}`)
+		}
+	}
 
 	let i = 0
 	while (i < references.length) {
@@ -38,7 +54,9 @@ export default function stringifyFunctionReferences(getDependencies: GetDependen
 		if (typeof value === 'function') {
 			functions[name] = getFunctionSourceCode(value, name)
 		} else {
-			// Regular values don't need to be stringified because they could be just "cloned".
+			// Non-function/non-class values don't need to be stringified
+			// because they could be just "cloned" in most cases, but not all cases:
+			// https://developer.mozilla.org/en-US/docs/Web/API/Web_Workers_API/Structured_clone_algorithm
 			variables[name] = value
 		}
 		i++

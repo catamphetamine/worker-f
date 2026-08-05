@@ -30,9 +30,11 @@ export default function createStreamingWorkerFunction<Input, Output>(
 		onOutput(listener: OutputListener<Output>) {
 			mustNotHaveStopped()
 			mustNotHaveStarted()
-			if (streamingOutputListener) {
-				throw new Error('Already listening')
-			}
+			// When called multiple times, it'll just overwrite the listener.
+			// This behavior is convenient when a worker function gets reused.
+			// if (streamingOutputListener) {
+			// 	throw new Error('Already listening')
+			// }
 			streamingOutputListener = listener
 			// isStreamingFn = true
 		},
@@ -40,9 +42,11 @@ export default function createStreamingWorkerFunction<Input, Output>(
 		onError(listener: ErrorListener) {
 			mustNotHaveStopped()
 			mustNotHaveStarted()
-			if (streamingErrorListener) {
-				throw new Error('Already set up')
-			}
+			// When called multiple times, it'll just overwrite the listener.
+			// This behavior is convenient when a worker function gets reused.
+			// if (streamingErrorListener) {
+			// 	throw new Error('Already set up')
+			// }
 			streamingErrorListener = listener
 			// isStreamingFn = true
 		},
