@@ -73,6 +73,24 @@ export default function createWorker<Input, Output>(
 
 	let worker: EnvironmentWorker
 
+	// Stops the worker.
+	const stop = () => {
+		worker.stop()
+	}
+
+	// Ingests data into the worker.
+	const ingest = (data: unknown, transferList?: Transferable[]) => {
+		try {
+			worker.ingest(data, transferList)
+		} catch (error) {
+			// If a `DOMException [DataCloneError]` is thrown, stop the worker, otherwise
+			// it will stay running and will prevent Node.js process from exiting.
+			stop()
+			// Re-throw the error.
+			throw error
+		}
+	}
+
 	// Starts the worker.
 	const start = (
 		arrayOfGetDependenciesFunctions: GetDependencies[],
@@ -126,18 +144,14 @@ export default function createWorker<Input, Output>(
 		// creation of same type of worker (if there'll ever be one).
 		//
 		if (vars) {
-			worker.ingest(vars, dependenciesTransferList)
+			ingest(vars, dependenciesTransferList)
 		}
 	}
 
 	return {
 		start,
-		stop: () => {
-			worker.stop()
-		},
-		ingest: (data: unknown, transferList?: Transferable[]) => {
-			worker.ingest(data, transferList)
-		}
+		stop,
+		ingest
 	}
 }
 
