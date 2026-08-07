@@ -576,6 +576,10 @@ But there's a catch: an `error` that "bubbles" from a worker function to the mai
 
 Also, if instead of throwing an `error`, a worker function sends it to the main thread as a usual value, then the `error` will neither retain its original class nor any of its properties: the class will be reset to generic `Error`, `name` will be rewritten with `"Error"`, and any other properties will just be discarded.
 
+## Transpilers
+
+This package can't be used with any transpilers such as [Babel](https://babeljs.io). This is because they insert their own helper functions at the top level of the transpiled code, so those helper functions become undeclared [external dependencies](#external-dependencies) that aren't possible to be declared beforehand in the original source code. As a result, when running such transpiled code, it throws an error: `<helper-function-name> is not defined`.
+
 ## CDN
 
 To include this library directly via a `<script/>` tag on a page, one can use any npm CDN service, e.g. [unpkg.com](https://unpkg.com) or [jsdelivr.com](https://jsdelivr.com)
