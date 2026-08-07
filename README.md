@@ -118,7 +118,7 @@ const workerFn = workerFunctionStream(
     // and then (optionally) use the `send()` function to output some result
     // back to the main thread. Here's an example of an "input handler" function
     // that calculates a sum of two numbers and sends it back to the main thread.
-    return (a: number, b: number) => {
+    return ([a, b]: [number, number]) => {
       // Just an example of updating the function's state — a simple counter.
       c++
       // Calculate a sum of the two input numbers and send the result back
@@ -169,13 +169,13 @@ workerFn.onError((error) => {
 workerFn.start()
 
 pending++
-workerFn.send(1, 2)
+workerFn.send([1, 2])
 
 pending++
-workerFn.send(3, 4)
+workerFn.send([3, 4])
 
 pending++
-workerFn.send(5, 6)
+workerFn.send([5, 6])
 ```
 
 ## External Dependencies
@@ -368,7 +368,16 @@ How large is "large-enough"?
 
 So the short answer is: "I personally don't really know or care". The rule of thumb is to keep the data being sent between the main thread and the worker thread to a minimum.
 
-To assess input/output "cloning" performance, a worker function exposes two properties — `inputLatency` and `outputLatency` (in milliseconds). They're accessible from the main thread and are updated every time the function has been [called](#call): `inputLatency` is how long it took for the main thread to send data to the worker thread, and `outputLatency` is how long it took for the worker thread to send data back to the main thread.
+To assess input/output "cloning" performance, every worker function exposes two properties — `inputLatency` and `outputLatency` (in milliseconds).
+
+<details>
+<summary>How to read and interpret <code>inputLatency</code> and <code>outputLatency</code></summary>
+
+######
+
+`inputLatency` and `outputLatency` are readable from a worker function instance in the main thread and are updated every time the function has been [called](#call):
+* `inputLatency` is how long it took for the main thread to send data to the worker thread, i.e. create a "serialized" copy of the data in the main thread and then "de-serialize" it in the worker thread.
+* `outputLatency` is how long it took for the worker thread to send data back to the main thread, i.e. create a "serialized" copy of the data in the worker thread and then "de-serialize" it in the main thread.
 
 ```js
 const workerFn = workerFunction((a, b) => a + b)
@@ -377,47 +386,95 @@ workerFn.start()
 
 await workerFn.call(1, 2) === 3
 
+// `inputLatency` is how long it took to send numbers `1` and `2` to the worker thread
 console.log(workerFn.inputLatency)
+
+// `outputLatency` is how long it took to send number `3` to the main thread
 console.log(workerFn.outputLatency)
 
 await workerFn.call(3, 4) === 7
 
+// `inputLatency` is how long it took to send numbers `3` and `4` to the worker thread
 console.log(workerFn.inputLatency)
+
+// `outputLatency` is how long it took to send number `7` to the main thread
 console.log(workerFn.outputLatency)
 
 workerFn.stop()
 ```
 
-Why are `inputLatency` and `outputLatency` an important factor? Because "cloning" is "synchronous", it blocks the main thread every time when cloning input/output data. This means that passing huge chunks of data between the main thread and the worker thread could "block" the main thread for even longer than it would take to actually process those chunks of data, defeating the whole purpose of using a worker to improve performance or responsiveness of an app. So this means that sending large chunks of data is only viable via [transfer](#transfer) of binary data because only it doesn't block the main thread. And if data is not binary, but still large, the only option is to transfer it in small-enough chunks via [streaming](#stream) so that the blocking of the main thread is not as noticeable.
+Why are `inputLatency` and `outputLatency` an important factor, and why seeing high values could indicate a problem? Because "cloning" is "synchronous", it blocks the main thread every time when cloning input/output data. This means that passing huge chunks of data between the main thread and the worker thread could "block" the main thread for even longer than it would take to actually process those chunks of data, defeating the whole purpose of using a worker to improve performance or responsiveness of an app. So seeing large numbers in `inputLatency` or `outputLatency` might indicate that the whole purpose of using a worker is being defeated.
+
+Sending large chunks of data is only viable via [transfer](#transfer) method and only for binary data because it's the only case when it doesn't block the main thread and sending such data is basically free. If data is not binary, but still large, the only option is to transfer it in small-enough chunks that're spread out in time using [streaming](#stream) so that the main thread doesn't block for too long.
+
+When speaking of "streaming" API, the input/output latency concept becomes a bit trickier, because the data flow is now "asynchronous" rather than a straight "data in → data out" loop, and a given input doesn't necessarily cause a given output. So when reading `inputLatency` and `outputLatency` upon receiving yet another output, one can easily tell which exact output the `outputLatency` is for, but one can't really tell which exact input the `inputLatency` is for — it's for whatever input was the most recent one by the time it sent the output.
 
 ```js
 import workerFunctionStream, { type Send } from 'worker-f/node/stream'
 
+// Sums input numbers.
 const workerFn = workerFunctionStream(
   (send: Send<number>) => {
-    // Calculates a sum of two numbers.
-    return (a: number, b: number) => {
-      send(a + b)
+    // Input numbers will be accumulated here.
+    let numbers = []
+    // A worker thread could send some output to the main thread
+    // even before in receives any input from the main thread.
+    send(0)
+    // Calculates a sum of accumulated numbers.
+    return (number: number) => {
+      // Append this number to the list of accumulated numbers.
+      numbers.push(number)
+      // As soon as it has accumulated 3 numbers.
+      if (numbers.length === 3) {
+        // Calculate a sum of the 3 numbers and send the value to the main thread.
+        send(numbers.reduce((sum, number) => sum + number))
+        numbers = []
+      } else {
+        // Not enough numbers accumulated yet.
+        // This is an example of how there might not necessarily be an output for a given input.
+      }
     }
   }
 )
 
 workerFn.onOutput((sum) => {
-  // `inputLatency` is the "latency" of the latest input.
-  // `outputLatency` is the "latency" of the latest output.
+  // `inputLatency` is the "latency" of the latest input
+  // `outputLatency` is the "latency" of the latest output
+  //
+  // Specifically:
+  //
+  // * The first received output is `0`
+  //   * `inputLatency` is `undefined`
+  //   * `outputLatency` is the "latency" of this output
+  // * The second received output is `6`
+  //   * `inputLatency` is the "latency" of the `3` input
+  //   * `outputLatency` is the "latency" of this output
+  //
   console.log(workerFn.inputLatency)
   console.log(workerFn.outputLatency)
 })
 
 workerFn.start()
 
-workerFn.send(1, 2)
-workerFn.send(3, 4)
-workerFn.send(5, 6)
+// An output of `0` will be received shortly after the function has started.
+
+// Send the first number to the worker — no output.
+workerFn.send(1)
+
+// Send the second number to the worker — no output.
+workerFn.send(2)
+
+// Send the third number to the worker — outputs `1 + 2 + 3 === 6`
+workerFn.send(3)
 
 // (later) When the application is being closed
 workerFn.stop()
 ```
+
+Another tricky aspect of interpreting `workerFn.inputLatency` in a "streaming" scenario is that it could be affected by a potential clogging of the input queue. Because processing input data in a worker thread is meant to be a computationally heavy operation, it would be natural for the worker thread to "block" while it's processing a given input, causing any subsequent input to wait in line, which adds to the `inputLatency` of that next input. So in a "streaming" scenario, a rise in `inputLatency` doesn't necessarily indicate an issue with "cloning" large data, but rather establishes a fact that input is being sent to the worker function faster than it can process it, which is absolutely normal.
+
+Same effect could be observed on rising `outputLatency` when sending new output data chunks to the main thread while it's still "blocked" processing previous chunks and can't really receive new ones yet, causing clogging of the output queue. This would indicate a problem if the whole point of using a worker is to "unblock" the main thread. But first make sure that you're not calling `console.log(workerFn.outputLatency)` for a lot of output data chunks in rapid succession because, funny enough, doing that would itself cause the "blocking" of the main thread and the rise of `outputLatency`.
+</details>
 
 ## Transfer
 

@@ -189,15 +189,14 @@ export default function createWorkerFunction_<
 		worker.ingest([Date.now(), inputArgs], inputTransferList(...inputArgs))
 	}
 
-	// These two variables are defined here just to work around
-	// TypeScript compiler error message.
-	let inputLatency: number | undefined
-	let outputLatency: number | undefined
+	// This variable is defined here just to work around TypeScript compiler error message:
+	// "Type 'number' is not assignable to type 'undefined'."
+	let numberOrUndefined: number | undefined
 
 	// Declare a worker function. It will be returned from this function.
 	const workerFn = {
-		inputLatency,
-		outputLatency,
+		inputLatency: numberOrUndefined,
+		outputLatency: numberOrUndefined,
 		/**
 		 * Adds external dependencies.
 		 * These dependencies must not change after the function is started.
