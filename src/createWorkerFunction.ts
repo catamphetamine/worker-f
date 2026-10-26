@@ -1,5 +1,5 @@
 import type { CreateWorkerInEnvironment } from './createWorker.ts'
-import createWorkerFunction_, { type WorkerFunctionBase } from './createWorkerFunction_.ts'
+import createWorkerFunctionOrStream, { type WorkerFunctionOrStream } from './createWorkerFunctionOrStream.ts'
 
 type SyncFn<Args extends Array<unknown>, Result> = (...args: Args) => Result
 type AsyncFn<Args extends Array<unknown>, Result> = (...args: Args) => Promise<Result>
@@ -55,7 +55,7 @@ export default function createWorkerFunction<Args extends Array<unknown>, Result
 	// i.e. it shouldn't reference anything outside of its body.
 	const createInputHandler = (
 		fn: Fn<Args, Result>,
-		send: (output: Result) => void
+		emit: (output: Result) => void
 	) => {
 		const isPromise = <Value>(anything: unknown): anything is Promise<Value> => {
 			return (
@@ -67,9 +67,9 @@ export default function createWorkerFunction<Args extends Array<unknown>, Result
 		return (args: Args) => {
 			const result = fn(...args)
 			if (isPromise(result)) {
-				result.then(send)
+				result.then(emit)
 			} else {
-				send(result)
+				emit(result)
 			}
 		}
 	}
@@ -98,7 +98,7 @@ export default function createWorkerFunction<Args extends Array<unknown>, Result
 		}
 	}
 
-	return createWorkerFunction_(
+	return createWorkerFunctionOrStream(
 		createWorkerInEnvironment,
 		fnOrAlias,
 		createMethods,
@@ -111,7 +111,7 @@ export default function createWorkerFunction<Args extends Array<unknown>, Result
 export interface WorkerFunction<
 	Args extends Array<unknown>,
 	Result
-> extends WorkerFunctionBase<Args, Result> {
+> extends WorkerFunctionOrStream<Args, Result> {
 	call(...args: Args): Promise<Result>;
 	callOnce(...args: Args): Promise<Result>;
 }

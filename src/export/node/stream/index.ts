@@ -1,2 +1,12 @@
-export { default as default } from './createStreamingWorkerFunctionInNode.ts'
-export type { StreamingWorkerFunction, Send } from '../../../createStreamingWorkerFunction.ts'
+export { default as default } from './createWorkerStreamInNode.ts'
+
+export type {
+	WorkerStream,
+	// (deprecated)
+	// The legacy name for `WorkerStream` was `StreamingWorkerFunction`.
+	StreamingWorkerFunction,
+	Emit,
+	// (deprecated)
+	// The legacy name for `Emit` was `Send`.
+	Send
+} from '../../../createWorkerStream.ts'

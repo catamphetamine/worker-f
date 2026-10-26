@@ -1,14 +1,14 @@
 import { expect, test } from 'vitest'
 
 import type { CreateWorkerInEnvironment } from './createWorker.ts'
-import createStreamingWorkerFunction, { type Send } from './createStreamingWorkerFunction.ts'
-import createNonStreamingWorkerFunction from './createWorkerFunction.ts'
+import createWorkerStream, { type Emit } from './createWorkerStream.ts'
+import createWorkerFunction from './createWorkerFunction.ts'
 
 const INTER_THREAD_COMMUNICATION_DELAY = 150
 
 export default function runTests(env: CreateWorkerInEnvironment) {
 	test('create and call a function', async () => {
-		const workerFn = createNonStreamingWorkerFunction(env, (a: number, b: number) => a + b)
+		const workerFn = createWorkerFunction(env, (a: number, b: number) => a + b)
 		await expect(async () => await workerFn.call(1, 2)).rejects.toThrow('Not started')
 		workerFn.start()
 		expect(() => workerFn.start()).toThrow('Was started')
@@ -21,7 +21,7 @@ export default function runTests(env: CreateWorkerInEnvironment) {
 	})
 
 	test('create and call a function once', async () => {
-		const workerFn = createNonStreamingWorkerFunction(env, (a: number, b: number) => a + b)
+		const workerFn = createWorkerFunction(env, (a: number, b: number) => a + b)
 		await expect(async () => await workerFn.call(1, 2)).rejects.toThrow('Not started')
 		expect(workerFn.inputLatency).toBeUndefined()
 		expect(workerFn.outputLatency).toBeUndefined()
@@ -37,27 +37,27 @@ export default function runTests(env: CreateWorkerInEnvironment) {
 	})
 
 	test('create and listen to a function', async () => {
-		const workerFn = createStreamingWorkerFunction(env, (send: Send<[number, number] | string>) => {
+		const workerStream = createWorkerStream(env, (emit: Emit<[number, number] | string>) => {
 			let count = 0
 			// An streaming worker function could receive multiple arguments from the main thread.
 			return ([a, b]: [number, number]) => {
 				count++
 				// An streaming worker function could send multiple arguments to the main thread.
-				send([a + b, count])
-				send(String(a + b + count))
+				emit([a + b, count])
+				emit(String(a + b + count))
 			}
 		})
-		expect(workerFn.inputLatency).toBeUndefined()
-		expect(workerFn.outputLatency).toBeUndefined()
+		expect(workerStream.inputLatency).toBeUndefined()
+		expect(workerStream.outputLatency).toBeUndefined()
 		let responseCounter = 0
 		// First time adding an error listener — the listener doesn't do anything.
-		workerFn.onOutput((error) => {
+		workerStream.onOutput((error) => {
 			expect(true).toEqual(false)
 		})
 		// First time adding an output listener — overwrites the first one.
-		workerFn.onOutput((output) => {
-			expect(workerFn.inputLatency).toBeTypeOf('number')
-			expect(workerFn.outputLatency).toBeTypeOf('number')
+		workerStream.onOutput((output) => {
+			expect(workerStream.inputLatency).toBeTypeOf('number')
+			expect(workerStream.outputLatency).toBeTypeOf('number')
 			responseCounter++
 			if (responseCounter === 1) {
 				expect(output).toBeInstanceOf(Array)
@@ -77,24 +77,24 @@ export default function runTests(env: CreateWorkerInEnvironment) {
 				throw new Error('Unexpected response')
 			}
 		})
-		workerFn.onError((error) => {
+		workerStream.onError((error) => {
 			throw new Error('Unexpected error')
 		})
-		expect(() => workerFn.send([1, 2])).toThrow('Not started')
-		workerFn.start()
-		expect(() => workerFn.onOutput(() => {})).toThrow('Was started')
-		expect(() => workerFn.onError(() => {})).toThrow('Was started')
-		expect(() => workerFn.start()).toThrow('Was started')
-		workerFn.send([1, 2])
+		expect(() => workerStream.push([1, 2])).toThrow('Not started')
+		workerStream.start()
+		expect(() => workerStream.onOutput(() => {})).toThrow('Was started')
+		expect(() => workerStream.onError(() => {})).toThrow('Was started')
+		expect(() => workerStream.start()).toThrow('Was started')
+		workerStream.push([1, 2])
 		expect(responseCounter).toEqual(0)
-		workerFn.send([1, 2])
+		workerStream.push([1, 2])
 		await delay(INTER_THREAD_COMMUNICATION_DELAY)
 		expect(responseCounter).toEqual(4)
-		workerFn.stop()
+		workerStream.stop()
 		// Stopping a function multiple times doesn't throw any error.
 		// expect(() => workerFn.stop()).toThrow('Was stopped')
-		workerFn.stop()
-		expect(() => workerFn.send([1, 2])).toThrow('Was stopped')
+		workerStream.stop()
+		expect(() => workerStream.push([1, 2])).toThrow('Was stopped')
 	})
 
 	test('not allow changing dependencies of an already-aliased function', async () => {
@@ -103,7 +103,7 @@ export default function runTests(env: CreateWorkerInEnvironment) {
 
 		// Create a function and assign an alias.
 
-		const workerFn = createNonStreamingWorkerFunction(env, (a: number, b: number) => a + b + c)
+		const workerFn = createWorkerFunction(env, (a: number, b: number) => a + b + c)
 
 		workerFn.addDependencies(() => [c])
 		workerFn.alias('sum')
@@ -122,7 +122,7 @@ export default function runTests(env: CreateWorkerInEnvironment) {
 
 		// Create a function from an alias.
 
-		const workerFn2 = createNonStreamingWorkerFunction(env, 'sum')
+		const workerFn2 = createWorkerFunction(env, 'sum')
 
 		expect(() => {
 			workerFn2.alias('a+b')
@@ -142,12 +142,12 @@ export default function runTests(env: CreateWorkerInEnvironment) {
 
 	test('throw when alias is not found', async () => {
 		expect(() => {
-			createNonStreamingWorkerFunction(env, 'alias-not-exists')
+			createWorkerFunction(env, 'alias-not-exists')
 		}).toThrow('Not found')
 	})
 
 	test('clonable dependencies', async () => {
-		const workerFn = createNonStreamingWorkerFunction(env, (a: number, b: number) => a + b)
+		const workerFn = createWorkerFunction(env, (a: number, b: number) => a + b)
 		const a = 1
 		const b = 2
 		const c = true
@@ -161,7 +161,7 @@ export default function runTests(env: CreateWorkerInEnvironment) {
 	})
 
 	test('return error when called', async () => {
-		const workerFn = createNonStreamingWorkerFunction(env, (a: number, b: number) => {
+		const workerFn = createWorkerFunction(env, (a: number, b: number) => {
 			return createTestError()
 		})
 		workerFn.addDependencies(() => [
@@ -186,7 +186,7 @@ export default function runTests(env: CreateWorkerInEnvironment) {
 	})
 
 	test('catch error when called', async () => {
-		const workerFn = createNonStreamingWorkerFunction(env, (a: number, b: number) => {
+		const workerFn = createWorkerFunction(env, (a: number, b: number) => {
 			throw createTestError()
 		})
 		workerFn.addDependencies(() => [
@@ -204,7 +204,7 @@ export default function runTests(env: CreateWorkerInEnvironment) {
 	})
 
 	test('catch error when called once', async () => {
-		const workerFn = createNonStreamingWorkerFunction(env, (a: number, b: number) => {
+		const workerFn = createWorkerFunction(env, (a: number, b: number) => {
 			throw createTestError()
 		})
 		workerFn.addDependencies(() => [
@@ -221,26 +221,26 @@ export default function runTests(env: CreateWorkerInEnvironment) {
 	})
 
 	test('catch error when called listened', async () => {
-		const workerFn = createStreamingWorkerFunction(env, (send: Send<void>) => {
+		const workerStream = createWorkerStream(env, (emit: Emit<void>) => {
 			return (input: number) => {
 				throw createTestError()
 			}
 		})
-		workerFn.addDependencies(() => [
+		workerStream.addDependencies(() => [
 			createTestError,
 			TestError,
 			TEST_ERROR_PROPERTIES
 		])
-		workerFn.onOutput((output) => {
+		workerStream.onOutput((output) => {
 			throw new Error('Unexpected response')
 		})
 		let errorCounter = 0
 		// First time adding an error listener — the listener doesn't do anything.
-		workerFn.onError((error) => {
+		workerStream.onError((error) => {
 			expect(true).toEqual(false)
 		})
 		// Second time adding an error listener — overwrites the first listener.
-		workerFn.onError((error) => {
+		workerStream.onError((error) => {
 			expect(error).toEqual(
 				expect.objectContaining(TEST_ERROR_PROPERTIES)
 			)
@@ -248,17 +248,17 @@ export default function runTests(env: CreateWorkerInEnvironment) {
 			expect(error).not.toBeInstanceOf(TestError)
 			errorCounter++
 		})
-		workerFn.start()
-		workerFn.send(1)
+		workerStream.start()
+		workerStream.push(1)
 		expect(errorCounter).toEqual(0)
 		await delay(INTER_THREAD_COMMUNICATION_DELAY)
 		expect(errorCounter).toEqual(1)
-		workerFn.stop()
+		workerStream.stop()
 	})
 
 	test('add dependencies that\'re "native" global classes or functions', async () => {
 		const fn = (length: number) => new Uint8Array(length)
-		const workerFn = createNonStreamingWorkerFunction(env, fn)
+		const workerFn = createWorkerFunction(env, fn)
 		const result = await workerFn.callOnce(1)
 		expect(result).toBeInstanceOf(Uint8Array)
 	})
@@ -268,29 +268,29 @@ export default function runTests(env: CreateWorkerInEnvironment) {
 		const c = () => d + 1
 		const fn = (a: number, b: number) => a + b + c()
 
-		let workerFn = createNonStreamingWorkerFunction(env, fn)
+		let workerFn = createWorkerFunction(env, fn)
 		workerFn.start()
 		await expect(async () => await workerFn.call(1, 2)).rejects.toThrow('c is not defined')
 
-		workerFn = createNonStreamingWorkerFunction(env, fn)
+		workerFn = createWorkerFunction(env, fn)
 		workerFn.addDependencies(() => [c])
 		workerFn.start()
 		await expect(async () => await workerFn.call(1, 2)).rejects.toThrow('d is not defined')
 
-		workerFn = createNonStreamingWorkerFunction(env, fn)
+		workerFn = createWorkerFunction(env, fn)
 		workerFn.addDependencies(() => [c, d])
 		workerFn.start()
 		expect(await workerFn.call(1, 2)).toEqual(6)
 		workerFn.stop()
 
-		workerFn = createNonStreamingWorkerFunction(env, fn)
+		workerFn = createWorkerFunction(env, fn)
 		// @ts-expect-error
 		expect(() => workerFn.addDependencies([c, d])).toThrow('function')
 	})
 
 	test('create transfer list for input arguments (call)', async () => {
 		const call = async (getInputTransferList?: (buffer: ArrayBuffer) => Transferable[]) => {
-			const workerFn = createNonStreamingWorkerFunction(env, (buffer: ArrayBuffer) => buffer.byteLength)
+			const workerFn = createWorkerFunction(env, (buffer: ArrayBuffer) => buffer.byteLength)
 
 			const buffer = new ArrayBuffer(1)
 			const view = new Uint8Array(buffer)
@@ -318,7 +318,7 @@ export default function runTests(env: CreateWorkerInEnvironment) {
 
 	test('create transfer list for output result (call)', async () => {
 		const test = async (alias?: string) => {
-			let workerFn = createNonStreamingWorkerFunction(env, () => {
+			let workerFn = createWorkerFunction(env, () => {
 				const buffer = new ArrayBuffer(1)
 				const view = new Uint8Array(buffer)
 				view.fill(255)
@@ -334,7 +334,7 @@ export default function runTests(env: CreateWorkerInEnvironment) {
 
 			if (alias) {
 				workerFn.alias(alias)
-				workerFn = createNonStreamingWorkerFunction(env, alias)
+				workerFn = createWorkerFunction(env, alias)
 			}
 
 			workerFn.start()
@@ -356,31 +356,31 @@ export default function runTests(env: CreateWorkerInEnvironment) {
 	})
 
 	test('streaming function: able to respond before receiving any input data', async () => {
-		const workerFn = createStreamingWorkerFunction(env, (send: Send<number>) => {
-			send(1)
+		const workerStream = createWorkerStream(env, (emit: Emit<number>) => {
+			emit(1)
 			return () => {}
 		})
 
 		let result: number | undefined
-		workerFn.onOutput((number: number) => {
+		workerStream.onOutput((number: number) => {
 			result = number
 		})
 
 		expect(result).toBeUndefined()
-		expect(workerFn.inputLatency).toBeUndefined()
-		expect(workerFn.outputLatency).toBeUndefined()
+		expect(workerStream.inputLatency).toBeUndefined()
+		expect(workerStream.outputLatency).toBeUndefined()
 
-		workerFn.start()
+		workerStream.start()
 		await delay(INTER_THREAD_COMMUNICATION_DELAY)
 		expect(result).toEqual(1)
-		expect(workerFn.inputLatency).toBeUndefined()
-		expect(workerFn.outputLatency).toBeTypeOf('number')
-		workerFn.stop()
+		expect(workerStream.inputLatency).toBeUndefined()
+		expect(workerStream.outputLatency).toBeTypeOf('number')
+		workerStream.stop()
 	})
 
 	test('create transfer list for input arguments (stream)', async () => {
 		const test = async (alias?: string, getInputTransferList?: (buffer: ArrayBuffer) => Transferable[]) => {
-			let workerFn = createStreamingWorkerFunction(env, (send: Send<ArrayBuffer>) => {
+			let workerStream = createWorkerStream(env, (emit: Emit<ArrayBuffer>) => {
 				return (buffer: ArrayBuffer) => {}
 			})
 
@@ -389,21 +389,21 @@ export default function runTests(env: CreateWorkerInEnvironment) {
 			view.fill(255)
 
 			if (getInputTransferList) {
-				workerFn.inputTransferList(getInputTransferList)
+				workerStream.inputTransferList(getInputTransferList)
 			}
 
 			if (alias) {
-				workerFn.alias(alias)
-				workerFn = createStreamingWorkerFunction(env, alias)
+				workerStream.alias(alias)
+				workerStream = createWorkerStream(env, alias)
 			}
 
-			workerFn.start()
+			workerStream.start()
 
 			expect(buffer.byteLength).toEqual(1)
-			await workerFn.send(buffer)
+			await workerStream.push(buffer)
 			expect(buffer.byteLength).toEqual(getInputTransferList ? 0 : 1)
 
-			workerFn.stop()
+			workerStream.stop()
 		}
 
 		// Without alias. Without `inputTransferList`.
@@ -421,12 +421,12 @@ export default function runTests(env: CreateWorkerInEnvironment) {
 
 
 	test('create transfer list for output result (stream)', async () => {
-		const workerFn = createStreamingWorkerFunction(env, (send: Send<ArrayBuffer>) => {
+		const workerStream = createWorkerStream(env, (emit: Emit<ArrayBuffer>) => {
 			return async () => {
 				const buffer = new ArrayBuffer(1)
 				const view = new Uint8Array(buffer)
 				view.fill(255)
-				send(buffer)
+				emit(buffer)
 				setTimeout(() => {
 					if (buffer.byteLength !== 0) {
 						throw new Error('Expected output buffer to have been transferred (stream)')
@@ -437,77 +437,77 @@ export default function runTests(env: CreateWorkerInEnvironment) {
 
 		let outputReceived = false
 
-		workerFn.onOutput((buffer: ArrayBuffer) => {
+		workerStream.onOutput((buffer: ArrayBuffer) => {
 			outputReceived = true
 			expect(buffer.byteLength).toEqual(1)
 		})
 
-		workerFn.outputTransferList((buffer) => [buffer])
+		workerStream.outputTransferList((buffer) => [buffer])
 
-		workerFn.start()
+		workerStream.start()
 
-		await workerFn.send(1)
+		await workerStream.push(1)
 		expect(outputReceived).toEqual(false)
 		await delay(INTER_THREAD_COMMUNICATION_DELAY)
 		expect(outputReceived).toEqual(true)
 
-		workerFn.stop()
+		workerStream.stop()
 	})
 
 	test('cache (non-streaming function)', async () => {
-		const workerFn_ = createNonStreamingWorkerFunction(env, (a: number, b: number) => a + b)
+		const workerFn_ = createWorkerFunction(env, (a: number, b: number) => a + b)
 		workerFn_.alias('fn1')
 
 		expect(() => {
-			createNonStreamingWorkerFunction(env, 'fn2')
+			createWorkerFunction(env, 'fn2')
 		}).toThrow('Not found')
 
-		const workerFn = createNonStreamingWorkerFunction(env, 'fn1')
+		const workerFn = createWorkerFunction(env, 'fn1')
 		workerFn.start()
 		expect(await workerFn.call(1, 2)).toEqual(3)
 		workerFn.stop()
 
-		const workerFn2 = createNonStreamingWorkerFunction(env, 'fn1')
+		const workerFn2 = createWorkerFunction(env, 'fn1')
 		workerFn2.start()
 		expect(await workerFn2.call(1, 2)).toEqual(3)
 		workerFn2.stop()
 	})
 
 	test('cache (streaming function)', async () => {
-		const workerFn_ = createStreamingWorkerFunction(env, (send: Send<number>) => {
+		const workerFn_ = createWorkerStream(env, (emit: Emit<number>) => {
 			return (number: number) => {
-				send(number*number)
+				emit(number*number)
 			}
 		})
 		workerFn_.alias('fn1')
 
 		expect(() => {
-			createStreamingWorkerFunction(env, 'fn2')
+			createWorkerStream(env, 'fn2')
 		}).toThrow('Not found')
 
-		const workerFn = createStreamingWorkerFunction<number, number>(env, 'fn1')
+		const workerStream = createWorkerStream<number, number>(env, 'fn1')
 		let output: number | undefined
-		workerFn.onOutput((result: number) => {
+		workerStream.onOutput((result: number) => {
 			output = result
 		})
-		workerFn.start()
+		workerStream.start()
 		expect(output).toBeUndefined()
-		workerFn.send(2)
+		workerStream.push(2)
 		await delay(INTER_THREAD_COMMUNICATION_DELAY)
 		expect(output).toEqual(4)
-		workerFn.stop()
+		workerStream.stop()
 
-		const workerFn2 = createStreamingWorkerFunction<number, number>(env, 'fn1')
+		const workerStream2 = createWorkerStream<number, number>(env, 'fn1')
 		let output2: number | undefined
-		workerFn2.onOutput((result: number) => {
+		workerStream2.onOutput((result: number) => {
 			output2 = result
 		})
-		workerFn2.start()
-		workerFn2.send(3)
+		workerStream2.start()
+		workerStream2.push(3)
 		expect(output2).toBeUndefined()
 		await delay(INTER_THREAD_COMMUNICATION_DELAY)
 		expect(output2).toEqual(9)
-		workerFn2.stop()
+		workerStream2.stop()
 	})
 }
 

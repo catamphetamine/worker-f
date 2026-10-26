@@ -6,7 +6,7 @@ import createWorker, {
 	type InputSentTimestampAndInputReceivedTimestampAndOutputSentTimestampAndOutput
 } from './createWorker.ts'
 
-export default function createWorkerFunction_<
+export default function createWorkerFunctionOrStream<
 	Fn,
 	InputArgs extends Array<unknown>,
 	Output,
@@ -35,7 +35,7 @@ export default function createWorkerFunction_<
 	handleError: (error: unknown) => void,
 
 	handleOutput: (output: Output) => void
-): WorkerFunctionBase<InputArgs, Output> & AdditionalMethods {
+): WorkerFunctionOrStream<InputArgs, Output> & AdditionalMethods {
 	// "Started" and "stopped" flags.
 	let started = false
 	let stopped = false
@@ -302,7 +302,7 @@ export default function createWorkerFunction_<
 		// Currently, we are in the main thread.
 		([inputSentTimestamp, inputReceivedTimestamp, outputTimestamp, output]: InputSentTimestampAndInputReceivedTimestampAndOutputSentTimestampAndOutput<Output>) => {
 			if (!stopped) {
-				// `createInputHandler()` function could call `send()` right away
+				// `createInputHandler()` function could call `emit()` right away
 				// without waiting to receive any input.
 				// In such case, `inputLatency` should stay `undefined`.
 				if (inputSentTimestamp !== -1) {
@@ -332,7 +332,7 @@ interface CacheValue<Fn, InputArgs extends Array<unknown>, Output> {
 	other?: any;
 }
 
-export interface WorkerFunctionBase<InputArgs extends Array<unknown>, Output> {
+export interface WorkerFunctionOrStream<InputArgs extends Array<unknown>, Output> {
 	addDependencies(getDependencies: GetDependencies): void;
 
 	inputTransferList(

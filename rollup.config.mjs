@@ -23,7 +23,7 @@ export default [
   },
 
   {
-    input: './lib/export/browser/stream/createStreamingWorkerFunctionInBrowser.js',
+    input: './lib/export/browser/stream/createWorkerStreamInBrowser.js',
     plugins: [
       json(),
       terser(),

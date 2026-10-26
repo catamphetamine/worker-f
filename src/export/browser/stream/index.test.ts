@@ -1,7 +1,7 @@
 import { test } from 'tape'
 
-import createStreamingWorkerFunction from './index.ts'
+import createWorkerStream from './index.ts'
 
 test('`/browser/stream` export', async (t) => {
-	t.equal(typeof createStreamingWorkerFunction, 'function')
+	t.equal(typeof createWorkerStream, 'function')
 })

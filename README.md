@@ -95,87 +95,114 @@ If a developer forgets to stop a worker function that is no longer used, it will
 
 ### Stream
 
-If a function is designed to produce multiple outputs over time, it should use "stream" API rather than "call" API.
+If a function is designed to produce multiple outputs for a given input, or to produce output without any input at all, then it should use "stream" API rather than "call" API.
 
 To use "stream" API, add `/stream` postfix to the `import` path.
 
 ```js
-import workerFunctionStream, { type Send } from 'worker-f/node/stream' // or 'worker-f/browser/stream'
+import createWorkerStream, { type Emit } from 'worker-f/node/stream' // or 'worker-f/browser/stream'
 
-const workerFn = workerFunctionStream(
-  // Use the supplied `send()` function to "stream" output data
-  // from the worker function to the main thread.
-  // If you're using TypeScript, then you must declare the `send()` function's type
-  // to be the exported `Send` type with a "generic" that describes the argument
-  // that you will be passing to the `send()` function.
-  (send: Send<[number, number]>) => {
-    // This code will only be run once on `workerFn.start()`
-    // and any variables declared here will exist until `workerFn.stop()`,
-    // so this is good place to declare any of the function's state variables.
-    let c = 0
-    // Return an "input handler" function.
-    // The "input handler" function is supposed to process the input in some way
-    // and then (optionally) use the `send()` function to output some result
-    // back to the main thread. Here's an example of an "input handler" function
-    // that calculates a sum of two numbers and sends it back to the main thread.
-    return ([a, b]: [number, number]) => {
-      // Just an example of updating the function's state — a simple counter.
-      c++
+// In this example, we create an "adder" stream that receives two numbers
+// and outputs their sum, along with a supplementary "counter" number.
+type Input = [number, number]
+type Output = [number, number]
+
+// Create an "adder" stream.
+const workerStream = createWorkerStream(
+  // Anything that happens inside these parentheses happens in a worker thread.
+  // In other words, you cannot reference anything outside of these parentheses
+  // because these parentheses are an impenetrable barrier between two parallel worlds —
+  // the world of the main thread and the world of a worker thread.
+  // These two worlds can communicate by passing input or output across the barrier,
+  // but they won't ever "see" each other.
+  //
+  // So here we define the code that runs in isolation in a worker thread.
+  // The only things you've got here are: any kind of input that the main thread
+  // decides to send to this worker stream, and a reference to an `emit()` function
+  // that can be used to send any kind of output to the main thread. That's it.
+  //
+  // If you're using TypeScript, then you must also pre-define the type of data
+  // that you'll be emitting using the `emit()` function.
+  //
+  (emit: Emit<Output>) => {
+    // The code inside this function will only be run once when you call `workerStream.start()`,
+    // and any variables declared here will exist until you call `workerStream.stop()`,
+    // so this is a good place to declare any "state" variables.
+    //
+    // For example, here we declare a "counter" variable.
+    // It will count the number of "sum" operations it did so far.
+    //
+    let count = 0
+
+    // In the end, we return an "input handler" function.
+    // This function should (optionally) process any input in some kind of way
+    // and then (optionally) use the `emit()` function to output some kind of result
+    // back to the main thread.
+    //
+    // In this example, the "input handler" function receives two numbers as an input,
+    // calculates their sum, and outputs it to the main thread, along with the count
+    // of "sum" oprations it did so far.
+    //
+    return ([a, b]: Input) => {
+      // Increase the number of "sum" oprations it did so far.
+      count++
       // Calculate a sum of the two input numbers and send the result back
-      // to the main thread along with the counter.
-      send([a + b, c])
+      // to the main thread, along with the number of "sum" oprations it did so far.
+      emit([a + b, count])
     }
   }
 )
 
-// Stores the outputs of the function
+// Here, we're back in the main thread.
+
+// Stores the results of adding two numbers.
 const sums = []
 
-// How many outputs it still expects from the function
-let pending = 0
+// How many outputs it still expects from the "adder" stream.
+let pendingOperations = 0
 
-// Calling `.onOutput()` sets up a listener that will handle any output from the function.
+// Calling `.onOutput()` sets up a listener that will handle any output from the stream.
 // Calling `.onOutput()` multiple times will just overwrite the listener.
-workerFn.onOutput(([sum, c]) => {
-  sums[c - 1] = sum
-  pending--
-  // When all outputs have been received
-  if (pending === 0) {
-    // Validate the end result
+workerStream.onOutput(([sum, counter]) => {
+  sums[counter - 1] = sum
+  pendingOperations--
+  // When all outputs have been received.
+  if (pendingOperations === 0) {
+    // Validate the end result.
     sums.length === 3
     sums[0] === 3
     sums[1] === 7
     sums[1] === 11
-    // Stop the worker function
-    workerFn.stop()
+    // Stop the worker stream.
+    workerStream.stop()
   }
 })
 
 // (optional)
 //
 // Calling `.onError()` sets up a listener that will intercept any errors
-// that're thrown from the worker function.
+// that're thrown from the worker stream.
 //
 // Calling `.onError()` multiple times will just overwrite the error listener.
 //
-// Even if an error is intercepted, the worker function will still automatically stop.
-// By default, if no `.onError()` listener is added, any error thrown from a worker function
+// Even if an error is intercepted, the worker stream will still automatically stop.
+// By default, if no `.onError()` listener is added, any error thrown from a worker stream
 // will just propagate to the main thread as an "unhandled rejection", crashing the app.
 //
-workerFn.onError((error) => {
-  console.log('Worker function exited with an error', error)
+workerStream.onError((error) => {
+  console.log('Worker stream exited with an error', error)
 })
 
-workerFn.start()
+workerStream.start()
 
-pending++
-workerFn.send([1, 2])
+pendingOperations++
+workerStream.push([1, 2])
 
-pending++
-workerFn.send([3, 4])
+pendingOperations++
+workerStream.push([3, 4])
 
-pending++
-workerFn.send([5, 6])
+pendingOperations++
+workerStream.push([5, 6])
 ```
 
 ## External Dependencies
@@ -328,12 +355,12 @@ workerFn.onError((error) => {
 })
 
 // Send input data to the picked worker function.
-workerFn.send(1, 2)
+workerFn.push(1, 2)
 
 // Return the worker to the pool here and unsubscribe from any responses or errors.
 // But what if the worker is still processing some previously received data.
 // In that case, if someone picks this worker function afterwards, and starts listening to it,
-// they could receive those completely unrelated echo-from-the-past `send()` calls,
+// they could receive those completely unrelated echo-from-the-past `emit()` calls,
 // so this worker is not really safe to be reused because it could procude such
 // "ghost" responses. And if workers can't really be reused after being returned to the pool,
 // there'd be no point in such pooling in the first place (for streaming-type functions).
@@ -389,7 +416,7 @@ await workerFn.call(1, 2) === 3
 // `inputLatency` is how long it took to send numbers `1` and `2` to the worker thread
 console.log(workerFn.inputLatency)
 
-// `outputLatency` is how long it took to send number `3` to the main thread
+// `outputLatency` is how long it took to send number `3` back to the main thread
 console.log(workerFn.outputLatency)
 
 await workerFn.call(3, 4) === 7
@@ -397,7 +424,7 @@ await workerFn.call(3, 4) === 7
 // `inputLatency` is how long it took to send numbers `3` and `4` to the worker thread
 console.log(workerFn.inputLatency)
 
-// `outputLatency` is how long it took to send number `7` to the main thread
+// `outputLatency` is how long it took to send number `7` back to the main thread
 console.log(workerFn.outputLatency)
 
 workerFn.stop()
@@ -410,16 +437,16 @@ Sending large chunks of data is only viable via [transfer](#transfer) method and
 When speaking of "streaming" API, the input/output latency concept becomes a bit trickier, because the data flow is now "asynchronous" rather than a straight "data in → data out" loop, and a given input doesn't necessarily cause a given output. So when reading `inputLatency` and `outputLatency` upon receiving yet another output, one can easily tell which exact output the `outputLatency` is for, but one can't really tell which exact input the `inputLatency` is for — it's for whatever input was the most recent one by the time it sent the output.
 
 ```js
-import workerFunctionStream, { type Send } from 'worker-f/node/stream'
+import createWorkerStream, { type Emit } from 'worker-f/node/stream'
 
 // Sums input numbers.
-const workerFn = workerFunctionStream(
-  (send: Send<number>) => {
+const workerStream = createWorkerStream(
+  (emit: Emit<number>) => {
     // Input numbers will be accumulated here.
     let numbers = []
-    // A worker thread could send some output to the main thread
+    // A worker stream could send some output to the main thread
     // even before in receives any input from the main thread.
-    send(0)
+    emit(0)
     // Calculates a sum of accumulated numbers.
     return (number: number) => {
       // Append this number to the list of accumulated numbers.
@@ -427,7 +454,7 @@ const workerFn = workerFunctionStream(
       // As soon as it has accumulated 3 numbers.
       if (numbers.length === 3) {
         // Calculate a sum of the 3 numbers and send the value to the main thread.
-        send(numbers.reduce((sum, number) => sum + number))
+        emit(numbers.reduce((sum, number) => sum + number))
         numbers = []
       } else {
         // Not enough numbers accumulated yet.
@@ -437,7 +464,7 @@ const workerFn = workerFunctionStream(
   }
 )
 
-workerFn.onOutput((sum) => {
+workerStream.onOutput((sum) => {
   // `inputLatency` is the "latency" of the latest input
   // `outputLatency` is the "latency" of the latest output
   //
@@ -450,30 +477,30 @@ workerFn.onOutput((sum) => {
   //   * `inputLatency` is the "latency" of the `3` input
   //   * `outputLatency` is the "latency" of this output
   //
-  console.log(workerFn.inputLatency)
-  console.log(workerFn.outputLatency)
+  console.log(workerStream.inputLatency)
+  console.log(workerStream.outputLatency)
 })
 
-workerFn.start()
+workerStream.start()
 
-// An output of `0` will be received shortly after the function has started.
+// An output of `0` will be received shortly after the worker stream has started.
 
 // Send the first number to the worker — no output.
-workerFn.send(1)
+workerStream.push(1)
 
 // Send the second number to the worker — no output.
-workerFn.send(2)
+workerStream.push(2)
 
 // Send the third number to the worker — outputs `1 + 2 + 3 === 6`
-workerFn.send(3)
+workerStream.push(3)
 
 // (later) When the application is being closed
-workerFn.stop()
+workerStream.stop()
 ```
 
-Another tricky aspect of interpreting `workerFn.inputLatency` in a "streaming" scenario is that it could be affected by a potential clogging of the input queue. Because processing input data in a worker thread is meant to be a computationally heavy operation, it would be natural for the worker thread to "block" while it's processing a given input, causing any subsequent input to wait in line, which adds to the `inputLatency` of that next input. So in a "streaming" scenario, a rise in `inputLatency` doesn't necessarily indicate an issue with "cloning" large data, but rather establishes a fact that input is being sent to the worker function faster than it can process it, which is absolutely normal.
+Another tricky aspect of interpreting `workerStream.inputLatency` in a "streaming" scenario is that it could be affected by a potential clogging of the input queue. Because processing input data in a worker thread is meant to be a computationally heavy operation, it would be natural for the worker thread to "block" while it's processing a given input, causing any subsequent input to wait in line, which adds to the `inputLatency` of that next input. So in a "streaming" scenario, a rise in `inputLatency` doesn't necessarily indicate an issue with "cloning" large data, but rather establishes a fact that input is being sent to the worker stream faster than it can process it, which is absolutely normal.
 
-Same effect could be observed on rising `outputLatency` when sending new output data chunks to the main thread while it's still "blocked" processing previous chunks and can't really receive new ones yet, causing clogging of the output queue. This would indicate a problem if the whole point of using a worker is to "unblock" the main thread. But first make sure that you're not calling `console.log(workerFn.outputLatency)` for a lot of output data chunks in rapid succession because, funny enough, doing that would itself cause the "blocking" of the main thread and the rise of `outputLatency`.
+Same effect could be observed on rising `outputLatency` when sending new output data chunks to the main thread while it's still "blocked" processing previous chunks and can't really receive new ones yet, causing clogging of the output queue. This would indicate a problem if the whole point of using a worker is to "unblock" the main thread. But first make sure that you're not calling `console.log(workerStream.outputLatency)` for a lot of output data chunks in rapid succession because, funny enough, doing that would itself cause the "blocking" of the main thread and the rise of `outputLatency`.
 </details>
 
 ## Transfer
@@ -592,9 +619,9 @@ To include this library directly via a `<script/>` tag on a page, one can use an
 <script>
   const workerFn = workerFunction((a, b) => a + b)
 
-  const workerFnStream = workerFunctionStream((send) => {
-    return (a, b) => {
-      send(a + b)
+  const workerStream = createWorkerStream((emit) => {
+    return ([a, b]) => {
+      emit(a + b)
     }
   })
 </script>
