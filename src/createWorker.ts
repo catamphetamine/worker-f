@@ -103,34 +103,17 @@ export default function createWorker<Input, Output>(
 
 		started = true
 
-		const cacheValue = getFromCache()
-		const cachedCodeAndVars = cacheValue && cacheValue._
-		const codeAndVars = cachedCodeAndVars || getCodeAndVars(createInputHandler, arrayOfGetDependenciesFunctions)
-		if (!cachedCodeAndVars) {
-			setInCache({ _: codeAndVars })
+		let codeAndVars = getFromCache()
+		if (!codeAndVars) {
+			codeAndVars = getCodeAndVars(createInputHandler, arrayOfGetDependenciesFunctions)
+			setInCache(codeAndVars)
 		}
 
 		const [code, vars] = codeAndVars
 
-		// Cache accessors for use in `createWorkerInEnvironment`.
-		const getOtherFromCache = () => {
-			const properties = getFromCache()
-			if (properties) {
-				return properties.other
-			}
-		}
-		const setOtherInCache = (value: CacheValue['other']) => {
-			setInCache({
-				...getFromCache(),
-				other: value
-			})
-		}
-
 		// Create a worker in a specific environment.
 		worker = createWorkerInEnvironment(
 			code,
-			getOtherFromCache,
-			setOtherInCache,
 			onError,
 			onOutput
 		)
@@ -234,10 +217,7 @@ function createFunctionsCodeAndVars(arrayOfGetDependenciesFunctions: GetDependen
 
 type CodeAndVars = [string, Record<string, unknown>]
 
-interface CacheValue {
-	_?: CodeAndVars;
-	other?: any;
-}
+type CacheValue = CodeAndVars
 
 export type InputSentTimestampAndInputReceivedTimestampAndOutputSentTimestampAndOutput<Output> = [number, number, number, Output]
 
@@ -268,8 +248,6 @@ export interface UniversalWorker {
 
 export type CreateWorkerInEnvironment = <Output>(
 	javascriptCode: string,
-	getFromCache: () => any | undefined,
-	setInCache: (value: any) => void,
 	onError: (error: unknown) => void,
 	onOutput: (output: Output) => void
 ) => EnvironmentWorker

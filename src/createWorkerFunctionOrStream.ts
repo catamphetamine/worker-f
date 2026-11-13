@@ -312,7 +312,7 @@ export default function createWorkerFunctionOrStream<
 				handleOutput(output)
 			}
 		},
-		// Caching.
+		// Caching is only used when `.alias()` is specified.
 		getOtherFromCache,
 		setOtherInCache
 	)

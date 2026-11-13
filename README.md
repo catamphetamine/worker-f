@@ -284,25 +284,27 @@ Needless to say that after a worker function has been started, none of its depen
 
 ## Caching
 
-Every time a new worker function is created, it has to stringify the function body in order to generate the worker's code. If the application plans on creating many workers from same function, and that function has no [external dependencies](#external-dependencies) or those dependencies are constant, then it would make sense to only generate the function's source code once and then reuse it every time a new worker is created from this function.
+Every time you create a new worker function, it has to stringify the function's body, and all of its dependencies, in order to generate the worker's code. If you plan on creating many instances of same worker function (with same dependencies), you may assign it an "alias" by calling the `.alias()` method on the worker function. That will cache the worker's code under an alias, so that next time you create a new worker function using that alias, it could simply reuse the already-generated worker's code.
 
-To "cache" a function's source code for creating future workers, call `.alias()` method on the worker function.
+Performance-wise, will it even be noticeable? I suppose not, so perhaps you shouldn't even bother.
+
+Because aliasing a function caches all of its dependencies, it is only viable for functions that either have no [external dependencies](#external-dependencies) or those dependencies are always identical no matter how or where you create a new instance of this worker function.
+
 
 ```js
+// `c` is a "global constant" that doesn't ever change.
 const c = () => 1
+
+// `sum` is a function that adds two numbers.
 const sum = (a, b) => a + b + c()
 
+// Define a worker function.
 const sumFn = workerFunction(sum)
 sumFn.addDependencies(() => [c])
 
-// Calling `.alias()` creates a snapshot of this worker function.
-// After assigning an alias, one could instantiate this type of worker function from the snapshot.
+// Call `.alias()` to create a snapshot of the worker function.
+// Later, one could create a new instance of this worker function from this snapshot using the alias.
 // The snapshot will include both the `sum` function body and any of its dependencies.
-//
-// Creating a new worker function from an alias will be slightly faster than from a function body
-// because it won't have to redo the stringification of the function body and any of its dependencies.
-// Does it really matter performance-wise? I didn't bother checking.
-//
 sumFn.alias('sum')
 
 // (optional)
@@ -606,6 +608,18 @@ Also, if instead of throwing an `error`, a worker function sends it to the main 
 ## Transpilers
 
 This package can't be used with any transpilers such as [Babel](https://babeljs.io). This is because they insert their own helper functions at the top level of the transpiled code, so those helper functions become undeclared [external dependencies](#external-dependencies) that aren't possible to be declared beforehand in the original source code. As a result, when running such transpiled code, it throws an error: `<helper-function-name> is not defined`.
+
+## Content Security Policy
+
+There're some websites that choose to define a strict [Content Security Policy](https://developer.mozilla.org/docs/Web/HTTP/Guides/CSP), preventing the page from accessing non-pre-approved URLs. If your website does that, then you might get an error:
+
+> Content-Security-Policy: The page's settings blocked a worker script (worker-src) at blob:… because it violates the following directive: "…"
+
+To fix it, you'll have to [explicitly](https://centralcsp.com/en/blog/csp-blob-scheme) allow `"blob":` URLs in your `Content-Security-Policy` header:
+
+```
+Content-Security-Policy: worker-src 'self' blob:
+```
 
 ## CDN
 
