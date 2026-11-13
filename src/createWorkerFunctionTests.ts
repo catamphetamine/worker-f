@@ -36,7 +36,7 @@ export default function runTests(env: CreateWorkerInEnvironment) {
 		workerFn.stop()
 	})
 
-	test('create and listen to a function', async () => {
+	test('create and listen to a worker stream', async () => {
 		const workerStream = createWorkerStream(env, (emit: Emit<[number, number] | string>) => {
 			let count = 0
 			// An streaming worker function could receive multiple arguments from the main thread.
@@ -95,6 +95,34 @@ export default function runTests(env: CreateWorkerInEnvironment) {
 		// expect(() => workerFn.stop()).toThrow('Was stopped')
 		workerStream.stop()
 		expect(() => workerStream.push([1, 2])).toThrow('Was stopped')
+	})
+
+	test('redirect errors from worker stream\'s `onOutput` handler to `onError` handler', async () => {
+		const workerStream = createWorkerStream(env, (emit: Emit<number>) => {
+			return (input: number) => {
+				// Simply echoes the input back to the main thread.
+				emit(input)
+			}
+		})
+		// Add dependencies.
+		workerStream.addDependencies(() => [createTestError])
+		// Add an error listener that catches an error.
+		let thrown
+		workerStream.onError((error) => {
+			thrown = error
+		})
+		// Add an output listener that throws an error.
+		workerStream.onOutput((output) => {
+			throw createTestError()
+		})
+		workerStream.start()
+		workerStream.push(1)
+		await delay(INTER_THREAD_COMMUNICATION_DELAY)
+		workerStream.stop()
+		expect(thrown).toBeDefined()
+		expect((thrown as unknown as TestError).code).toEqual(TEST_ERROR_PROPERTIES.code)
+		expect((thrown as unknown as TestError).name).toEqual(TEST_ERROR_PROPERTIES.name)
+		expect(thrown as unknown as TestError).toBeInstanceOf(TestError)
 	})
 
 	test('not allow changing dependencies of an already-aliased function', async () => {
