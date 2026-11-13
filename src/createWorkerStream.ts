@@ -105,12 +105,13 @@ export default function createWorkerStream<Input, Output>(
 
 	// This function will be executed in the main thread.
 	// Currently, we are in the main thread.
-	const handleOutput = (output: Output) => {
+	const handleOutput = (output: Output, stop: () => void) => {
 		if (streamingOutputListener) {
 			try {
 				streamingOutputListener(output)
 			} catch (error) {
 				handleError(error)
+				stop()
 			}
 		} else {
 			console.warn('[worker-f] Worker output missed', output)

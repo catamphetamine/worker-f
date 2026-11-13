@@ -88,7 +88,7 @@ export default function createWorkerFunction<Args extends Array<unknown>, Result
 
 	// This function will be executed in the main thread.
 	// Currently, we are in the main thread.
-	const handleOutput = (output: Result) => {
+	const handleOutput = (output: Result, stop: () => void) => {
 		if (resolveCall) {
 			resolveCall(output)
 			resolveCall = undefined

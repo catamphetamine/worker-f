@@ -118,7 +118,9 @@ export default function runTests(env: CreateWorkerInEnvironment) {
 		workerStream.start()
 		workerStream.push(1)
 		await delay(INTER_THREAD_COMMUNICATION_DELAY)
-		workerStream.stop()
+		// No need to call `.stop()` here manually because the worker
+		// has already been automatically stopped.
+		// workerStream.stop()
 		expect(thrown).toBeDefined()
 		expect((thrown as unknown as TestError).code).toEqual(TEST_ERROR_PROPERTIES.code)
 		expect((thrown as unknown as TestError).name).toEqual(TEST_ERROR_PROPERTIES.name)

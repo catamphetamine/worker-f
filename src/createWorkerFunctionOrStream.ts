@@ -34,7 +34,7 @@ export default function createWorkerFunctionOrStream<
 
 	handleError: (error: unknown) => void,
 
-	handleOutput: (output: Output) => void
+	handleOutput: (output: Output, stop: () => void) => void
 ): WorkerFunctionOrStream<InputArgs, Output> & AdditionalMethods {
 	// "Started" and "stopped" flags.
 	let started = false
@@ -309,7 +309,7 @@ export default function createWorkerFunctionOrStream<
 					workerFn.inputLatency = inputReceivedTimestamp - inputSentTimestamp
 				}
 				workerFn.outputLatency = Date.now() - outputTimestamp
-				handleOutput(output)
+				handleOutput(output, stop)
 			}
 		},
 		// Caching is only used when `.alias()` is specified.
